@@ -1,0 +1,54 @@
+### Gradle ###
+# Gradle 构建缓存和其他元数据
+.gradle/
+# Gradle 本地属性文件（用于存储 API 密钥等敏感数据）
+local.properties
+
+### 构建输出 ###
+# 编译后的 Java 类和资源
+build/
+out/
+classes/
+bin/
+
+### IDEs ###
+# 忽略所有特定于 IDE 的文件
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Visual Studio Code
+.vscode/
+.settings/
+.classpath
+.project
+
+# Eclipse
+*.launch
+
+### Fabric/Minecraft ###
+run/
+
+### 操作系统特定文件 ###
+# 忽略操作系统生成的文件
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+### 日志和临时文件 ###
+# Java HotSpot VM 错误日志
+hs_err_*.log
+# Minecraft 回放日志
+replay_*.log
+# Java 堆转储文件
+*.hprof
+# Java 飞行记录器文件
+*.jfr
