@@ -1,59 +1,54 @@
 # Translate All in One
-- - -
 
-- Minecraft 版本: 1.21.5
-- Mod 加载器版本 (Fabric): 0.16.14
-- Fabric API 版本: 0.128.1+1.21.5
-- Java 版本: 21
-- 项目包名: com.cedarxuesong.translate_allinone
+> **⚠️ 预览版警告**
+>
+> 这是一个正在积极开发中的模组预览版。功能可能尚不稳定或存在未预见的错误。
+> 欢迎您通过提交 **Issues** 来报告问题、提出建议或分享您的想法。您的反馈对我们至关重要！
 
-这是一个游戏内AI翻译模组，有多种翻译功能。
-使用openaiApi或ollamaApi,拥有多线程并行翻译能力,同时支持流式和非流式响应。
-- TODO LIST:
-  - 聊天翻译
-    - 使用mixin注入聊天栏gui内
-      - 多线程响应翻译结果在原位替换内容
-    - 使用mixin注入聊天信息的数据包处理
-      - 添加"[T]"(可自定义)在消息后，这串字符带单独的指令响应和鼠标悬浮文字，点击发送/translate_allinone translate chatline < MessageId >
-    - 响应翻译命令
-      - 使用多线程响应翻译命令，有流式和非流式
-        - 非流式在响应结束后在消息原位置替换消息。
-        - 流式响应实时替换翻译内容
-  - 物品hover信息栏翻译
-    - 使用mixin注入物品数据包和物品栏数据包
-    - 使用翻译模板转换：将数字和使用符号分隔的数字转换为占位符。
-    - 将翻译的模板缓存起来
-    - 使用哈希匹配，模板原文和翻译后的模板供查找。
-  - 侧板计分板翻译
-    - 待定
-  - 顶部Tab栏翻译
-    - 待定
-  - 配置管理器
-    - 使用不同的配置项POJO方便查找
-    - 使用cloth-config-fabric自动创建配置Gui
-  - 缓存管理器
-    - 将不同功能模块的翻译模板缓存到不同的文件。
-  - 配置Gui (通过cloth-config完成)
-    - 分别可以设置不同模块的翻译设置，不同模块的翻译模型等是分开的
-      - openai兼容
-        - 模型baseurl
-        - 模型apikey
-        - 模型id
-        - 模型温度
-        - 自定义参数
-      - ollamaApi
-        - 模型url
-        - 模型id
-        - 模型温度
-        - 自定义参数
-    - 可以设置目标语言
-      - 暂时不提供可以直接修改的系统提示词
+一款为 Minecraft 打造的功能强大的游戏内 AI 实时翻译模组，基于 Fabric。
 
-暂时这些内容，后面待定
+## ✨ 功能特性
 
-## 已完成：
-- llmapi [示例程序](doc/llmapi/Example.md)
-  - openaiApi
-  - ollamaApi
-- 模组配置管理器
-- 配置设置UI
+- **聊天翻译**: 实时翻译聊天信息，支持流式响应，带来无缝的交流体验。
+- **物品翻译**: 自动翻译物品的名称和描述 (Lore)，支持模板缓存，高效且节省资源。
+- **高度可配置**: 通过游戏内菜单 (需要 [ModMenu](https://www.curseforge.com/minecraft/mc-mods/modmenu))，您可以轻松配置：
+    - 支持多种 AI 服务商 (OpenAI, Ollama)。
+    - 为不同功能（聊天、物品）设置独立的翻译模型和参数。
+    - 自定义 API 地址、密钥、模型 ID 等。
+- **智能缓存**: 自动缓存翻译结果，减少重复请求，提升性能。
+
+## 🛠️ 安装与使用
+
+1.  确保您已安装 [Fabric Loader](https://fabricmc.net/)。
+2.  下载本模组的最新版本以及所需的前置模组：
+    - [Fabric API](https://www.curseforge.com/minecraft/mc-mods/fabric-api) (必需)
+    - [Cloth Config API](https://www.curseforge.com/minecraft/mc-mods/cloth-config) (必需)
+    - [ModMenu](https://www.curseforge.com/minecraft/mc-mods/modmenu) (推荐, 用于游戏内配置)
+3.  将所有下载的 `.jar` 文件放入您 Minecraft 实例的 `mods` 文件夹中。
+4.  启动游戏，在 ModMenu 的配置界面中找到 `Translate All in One`，然后设置您的 AI 服务商信息。
+
+## 🔧 配置
+
+本模组使用 Cloth Config API 提供详细的配置界面。您可以在 ModMenu 中进行以下设置：
+
+- **通用设置**:
+  - 目标翻译语言。
+- **服务商设置 (OpenAI / Ollama)**:
+  - API Base URL
+  - API Key (仅 OpenAI)
+  - 模型 ID
+  - 模型温度 (Temperature)
+  - 其他自定义参数
+
+## 🤝 贡献
+
+我们欢迎任何形式的贡献！如果您发现任何 Bug 或有功能建议，请随时在本项目的 GitHub Issues 页面提交。
+
+## 📝 待办事项 (TODO)
+
+- [ ] 侧边栏计分板翻译
+- [ ] 顶部 Tab 栏翻译
+
+## 📜 许可证
+
+本项目采用 [MIT License](./LICENSE) 授权。
