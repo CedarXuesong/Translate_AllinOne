@@ -31,7 +31,7 @@ public class ItemTranslateConfig {
     @Comment("The target language for translation")
     public String target_language = "Chinese";
 
-    @Comment("LLM Provider")
+    @Comment("Large Language Model Suppliers (Click to Switch)")
     @ConfigEntry.Gui.EnumHandler(option = ConfigEntry.Gui.EnumHandler.EnumDisplayOption.BUTTON)
     public Provider llm_provider = Provider.OPENAI;
 

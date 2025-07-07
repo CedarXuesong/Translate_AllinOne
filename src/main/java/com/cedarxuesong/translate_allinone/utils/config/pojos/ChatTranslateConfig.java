@@ -20,7 +20,7 @@ public class ChatTranslateConfig {
     @Comment("Receive the translated response in a streaming fashion")
     public boolean streaming_response = false;
 
-    @Comment("LLM Provider")
+    @Comment("Large Language Model Suppliers (Click to Switch)")
     @ConfigEntry.Gui.EnumHandler(option = ConfigEntry.Gui.EnumHandler.EnumDisplayOption.BUTTON)
     public Provider llm_provider = Provider.OPENAI;
 
