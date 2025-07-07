@@ -25,6 +25,7 @@ bin/
 .settings/
 .classpath
 .project
+Translate_AllinOne.code-workspace
 
 # Eclipse
 *.launch
@@ -52,3 +53,7 @@ replay_*.log
 *.hprof
 # Java 飞行记录器文件
 *.jfr
+
+### 项目特定忽略 ###
+# 项目文档目录
+/doc/
