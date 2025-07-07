@@ -3,15 +3,15 @@
 	"id": "translate_allinone",
 	"version": "${version}",
 	"name": "Translate All in One",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"description": "一款为 Minecraft 打造的功能强大的游戏内 AI 实时翻译模组，基于 Fabric。",
 	"authors": [
-		"Me!"
+		"cedarxuesong"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"homepage": "https://github.com/cedarxuesong/Translate_AllinOne",
+		"sources": "https://github.com/cedarxuesong/Translate_AllinOne"
 	},
-	"license": "CC0-1.0",
+	"license": "MIT",
 	"icon": "assets/translate_allinone/icon.png",
 	"environment": "*",
 	"entrypoints": {
@@ -29,9 +29,10 @@
 		"fabricloader": ">=0.16.14",
 		"minecraft": "~1.21.5",
 		"java": ">=21",
-		"fabric-api": "*"
+		"fabric-api": "*",
+		"cloth-config": ">=18.0.145"
 	},
 	"suggests": {
-		"another-mod": "*"
+		"modmenu": ">=11.0.0-beta.1"
 	}
 }
