@@ -2,7 +2,7 @@
 
 > **⚠️ Preview Warning**
 >
-> Currently only supports 1.21.5
+> Currently only supports >=1.21.5
 > This is a preview version of a mod that is actively being developed. Features may be unstable or have unforeseen bugs.
 > You are welcome to report issues, suggest features, or share your ideas by submitting **Issues**. Your feedback is crucial to us!
 
