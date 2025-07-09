@@ -1,5 +1,61 @@
 # Translate All in One
 
+> **⚠️ Preview Warning**
+>
+> Currently only supports 1.21.5
+> This is a preview version of a mod that is actively being developed. Features may be unstable or have unforeseen bugs.
+> You are welcome to report issues, suggest features, or share your ideas by submitting **Issues**. Your feedback is crucial to us!
+
+A powerful in-game AI real-time translation mod for Minecraft, based on Fabric.
+
+## ✨ Features
+
+- **Chat Translation**: Real-time translation of chat messages, supporting streaming responses for a seamless communication experience.
+- **Item Translation**: Automatically translates item names and descriptions (Lore), supporting template caching, efficient and resource-saving.
+- **Highly Configurable**: Through the in-game menu (requires [ModMenu](https://www.curseforge.com/minecraft/mc-mods/modmenu)), you can easily configure:
+    - Support for multiple AI service providers (OpenAI, Ollama).
+    - Set independent translation models and parameters for different functions (chat, items).
+    - Customize API address, key, model ID, etc.
+- **Smart Caching**: Automatically caches translation results, reducing repeated requests and improving performance.
+
+## 🛠️ Installation and Usage
+
+1. Make sure you have installed [Fabric Loader](https://fabricmc.net/).
+2. Download the latest version of this mod and the required dependencies:
+    - [Fabric API](https://www.curseforge.com/minecraft/mc-mods/fabric-api) (required)
+    - [Cloth Config API](https://www.curseforge.com/minecraft/mc-mods/cloth-config) (required)
+    - [ModMenu](https://www.curseforge.com/minecraft/mc-mods/modmenu) (recommended, for in-game configuration)
+3. Place all downloaded `.jar` files into the `mods` folder of your Minecraft instance.
+4. Launch the game, find `Translate All in One` in the ModMenu configuration interface, and set your AI service provider information.
+
+## 🔧 Configuration
+
+This mod uses the Cloth Config API to provide a detailed configuration interface. You can perform the following settings in ModMenu:
+
+- **General Settings**:
+  - Target translation language.
+- **Service Provider Settings (OpenAI / Ollama)**:
+  - API Base URL
+  - API Key (Only for OpenAI)
+  - Model ID
+  - Model Temperature (Temperature)
+  - Other custom parameters
+
+## 🤝 Contribution
+
+We welcome any form of contribution! If you find any bugs or have feature suggestions, feel free to submit them on this project's GitHub Issues page.
+
+## 📝 To-Do List (TODO)
+
+- [ ] Sidebar Scoreboard Translation
+- [ ] Top Tab Bar Translation
+
+## 📜 License
+
+This project is licensed under the [MIT License](./LICENSE).
+
+# Translate All in One
+
 > **⚠️ 预览版警告**
 >
 > 暂时只支持1.21.5
