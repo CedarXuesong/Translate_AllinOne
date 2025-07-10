@@ -8,7 +8,8 @@
   "client": [
     "mixinChatHud.ChatHudAccessor",
     "mixinChatHud.ChatHudMixin",
-    "mixinItem.ItemStackMixin"
+    "mixinItem.ItemStackMixin",
+    "mixinInGameGui.InGameHudMixin"
   ],
   "injectors": {
     "defaultRequire": 1
