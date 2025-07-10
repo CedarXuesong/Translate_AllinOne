@@ -8,4 +8,7 @@ public class ConfigData {
 
     @SerializedName("ItemTranslateConfig")
     public ItemTranslateConfig itemTranslateConfig = new ItemTranslateConfig();
+
+    @SerializedName("ScoreboardConfig")
+    public ScoreboardConfig scoreboardConfig = new ScoreboardConfig();
 }

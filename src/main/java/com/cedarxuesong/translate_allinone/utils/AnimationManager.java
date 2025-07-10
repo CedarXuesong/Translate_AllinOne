@@ -28,11 +28,10 @@ public class AnimationManager {
         MutableText animatedText = Text.empty();
         long time = System.currentTimeMillis();
 
-        for (int i = 0, charIndex = 0; i < plainText.length(); i += Character.charCount(plainText.codePointAt(i)), charIndex++) {
-            int codePoint = plainText.codePointAt(i);
-            float sine = (float) (Math.sin(time / 200.0 + charIndex / 5.0) + 1.0) / 2.0f;
+        for (int i = 0; i < plainText.length(); i++) {
+            float sine = (float) (Math.sin(time / 200.0 + i / 5.0) + 1.0) / 2.0f;
             int color = ColorHelper.lerp(sine, DARK_GREY, LIGHT_GREY);
-            animatedText.append(Text.literal(new String(Character.toChars(codePoint)))
+            animatedText.append(Text.literal(String.valueOf(plainText.charAt(i)))
                     .setStyle(Style.EMPTY.withColor(TextColor.fromRgb(color))));
         }
         return animatedText;
@@ -44,16 +43,14 @@ public class AnimationManager {
         AtomicInteger charIndex = new AtomicInteger(0);
 
         originalText.visit((style, s) -> {
-            for (int i = 0; i < s.length(); ) {
-                int codePoint = s.codePointAt(i);
+            for (int i = 0; i < s.length(); i++) {
                 float sine = (float) (Math.sin(time / 200.0 + charIndex.get() / 5.0) + 1.0) / 2.0f;
                 int color = ColorHelper.lerp(sine, DARK_GREY, LIGHT_GREY);
-
+                
                 Style newStyle = style.withColor(TextColor.fromRgb(color));
-
-                animatedText.append(Text.literal(new String(Character.toChars(codePoint))).setStyle(newStyle));
+                
+                animatedText.append(Text.literal(String.valueOf(s.charAt(i))).setStyle(newStyle));
                 charIndex.incrementAndGet();
-                i += Character.charCount(codePoint);
             }
             return Optional.empty();
         }, Style.EMPTY);

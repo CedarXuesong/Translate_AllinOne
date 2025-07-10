@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class LoreTemplateProcessor {
+public class TemplateProcessor {
 
     // This regex captures:
     // 1. Numbers with thousand separators (e.g., 1,000,000)

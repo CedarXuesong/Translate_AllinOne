@@ -9,7 +9,8 @@
     "mixinChatHud.ChatHudAccessor",
     "mixinChatHud.ChatHudMixin",
     "mixinItem.ItemStackMixin",
-    "mixinInGameGui.InGameHudMixin"
+    "mixinInGameGui.InGameHudMixin",
+    "mixinInGameGui.InGameHudAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

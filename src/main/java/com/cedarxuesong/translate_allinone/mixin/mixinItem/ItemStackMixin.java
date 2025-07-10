@@ -4,7 +4,7 @@ import com.cedarxuesong.translate_allinone.utils.AnimationManager;
 import com.cedarxuesong.translate_allinone.utils.cache.TextTemplateCache;
 import com.cedarxuesong.translate_allinone.utils.config.ModConfig;
 import com.cedarxuesong.translate_allinone.utils.config.pojos.ItemTranslateConfig;
-import com.cedarxuesong.translate_allinone.utils.text.LoreTemplateProcessor;
+import com.cedarxuesong.translate_allinone.utils.text.TemplateProcessor;
 import com.cedarxuesong.translate_allinone.utils.text.StylePreserver;
 import com.cedarxuesong.translate_allinone.utils.translate.ItemTranslateManager;
 import me.shedaniel.autoconfig.AutoConfig;
@@ -83,7 +83,7 @@ public abstract class ItemStackMixin {
                     translatableLines++;
                     // Preserving styles by extracting them first
                     StylePreserver.ExtractionResult styleResult = StylePreserver.extractAndMark(line);
-                    LoreTemplateProcessor.TemplateExtractionResult templateResult = LoreTemplateProcessor.extract(styleResult.markedText);
+                    TemplateProcessor.TemplateExtractionResult templateResult = TemplateProcessor.extract(styleResult.markedText);
 
                     String unicodeTemplate = templateResult.template;
                     String legacyTemplateKey = StylePreserver.toLegacyTemplate(unicodeTemplate, styleResult.styleMap);
@@ -97,7 +97,7 @@ public abstract class ItemStackMixin {
                     Text finalTooltipLine;
 
                     if (status == TextTemplateCache.TranslationStatus.TRANSLATED) {
-                        String reassembledTranslated = LoreTemplateProcessor.reassemble(translatedTemplate, templateResult.values);
+                        String reassembledTranslated = TemplateProcessor.reassemble(translatedTemplate, templateResult.values);
                         finalTooltipLine = StylePreserver.fromLegacyText(reassembledTranslated);
                     } else if (status == TextTemplateCache.TranslationStatus.ERROR) {
                         String errorMessage = TextTemplateCache.getInstance().getError(legacyTemplateKey);
@@ -110,7 +110,7 @@ public abstract class ItemStackMixin {
                         finalTooltipLine = errorText;
                     } else {
                         // No translation found, display original reassembled text with animation.
-                        String reassembledOriginal = LoreTemplateProcessor.reassemble(unicodeTemplate, templateResult.values);
+                        String reassembledOriginal = TemplateProcessor.reassemble(unicodeTemplate, templateResult.values);
                         Text originalTextObject = StylePreserver.reapplyStyles(reassembledOriginal, styleResult.styleMap);
                         finalTooltipLine = AnimationManager.getAnimatedStyledText(originalTextObject);
                     }
