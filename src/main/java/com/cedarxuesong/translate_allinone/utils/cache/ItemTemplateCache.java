@@ -12,16 +12,14 @@ import java.io.IOException;
 import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.stream.Collectors;
 import java.util.ArrayList;
 
-public class TextTemplateCache {
+public class ItemTemplateCache {
 
     public enum TranslationStatus {
         TRANSLATED,
@@ -33,7 +31,7 @@ public class TextTemplateCache {
 
     public record CacheStats(int translated, int total) {}
 
-    private static final TextTemplateCache INSTANCE = new TextTemplateCache();
+    private static final ItemTemplateCache INSTANCE = new ItemTemplateCache();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final String CACHE_FILE_NAME = "item_translate_cache.json";
     private final Path cacheFilePath;
@@ -45,7 +43,7 @@ public class TextTemplateCache {
     private final Map<String, String> errorCache = new ConcurrentHashMap<>();
     private volatile boolean isDirty = false;
 
-    private TextTemplateCache() {
+    private ItemTemplateCache() {
         this.cacheFilePath = FabricLoader.getInstance().getConfigDir()
                 .resolve(Translate_AllinOne.MOD_ID)
                 .resolve(CACHE_FILE_NAME);
@@ -66,7 +64,7 @@ public class TextTemplateCache {
         return pendingQueue.isEmpty();
     }
 
-    public static TextTemplateCache getInstance() {
+    public static ItemTemplateCache getInstance() {
         return INSTANCE;
     }
 

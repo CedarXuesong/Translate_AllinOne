@@ -8,39 +8,56 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ItemTranslateConfig {
-    @Comment("Enable item translation features")
+    @ConfigEntry.Gui.Tooltip
     public boolean enabled = false;
 
-    @Comment("Translate custom names of items (e.g., from an anvil)")
+    @ConfigEntry.Gui.Tooltip
     public boolean enabled_translate_item_custom_name = false;
 
-    @Comment("Translate the lore of items")
+    @ConfigEntry.Gui.Tooltip
     public boolean enabled_translate_item_lore = false;
 
-    @Comment("The number of parallel translation threads")
+    @ConfigEntry.Gui.Tooltip
     @ConfigEntry.BoundedDiscrete(min = 1, max = 10)
     public int max_concurrent_requests = 2;
 
-    @Comment("API requests per minute limit (0 to disable)")
+    @ConfigEntry.Gui.Tooltip
     public int requests_per_minute = 60;
 
-    @Comment("The maximum number of item lore lines to translate in a single API request")
+    @ConfigEntry.Gui.Tooltip
     @ConfigEntry.BoundedDiscrete(min = 1, max = 100)
     public int max_batch_size = 10;
 
-    @Comment("The target language for translation")
+    @ConfigEntry.Gui.Tooltip
     public String target_language = "Chinese";
 
-    @Comment("Large Language Model Suppliers (Click to Switch)")
+    @ConfigEntry.Gui.Tooltip
     @ConfigEntry.Gui.EnumHandler(option = ConfigEntry.Gui.EnumHandler.EnumDisplayOption.BUTTON)
     public Provider llm_provider = Provider.OPENAI;
 
 
     @ConfigEntry.Gui.CollapsibleObject(startExpanded = true)
+    public KeybindingConfig keybinding = new KeybindingConfig();
+
+    @ConfigEntry.Gui.CollapsibleObject(startExpanded = true)
     public OpenaiApi openapi = new OpenaiApi();
 
-    @ConfigEntry.Gui.CollapsibleObject
+    @ConfigEntry.Gui.CollapsibleObject(startExpanded = true)
     public OllamaApi ollama = new OllamaApi();
+
+
+    public enum KeybindingMode {
+        HOLD_TO_TRANSLATE,
+        HOLD_TO_SEE_ORIGINAL,
+        DISABLED
+    }
+
+    public static class KeybindingConfig {
+        @ConfigEntry.Gui.PrefixText
+        @ConfigEntry.Gui.Tooltip(count = 4)
+        @ConfigEntry.Gui.EnumHandler(option = ConfigEntry.Gui.EnumHandler.EnumDisplayOption.BUTTON)
+        public KeybindingMode mode = KeybindingMode.DISABLED;
+    }
 
     public static class OpenaiApi{
         @ConfigEntry.Gui.PrefixText
@@ -49,7 +66,7 @@ public class ItemTranslateConfig {
         public String modelId = "gpt-4o";
         public double temperature = 0.7;
         public String system_prompt_suffix = "\\no_think";
-        @Comment("Custom parameters to be sent with the API request")
+        @ConfigEntry.Gui.Tooltip
         public List<CustomParameterEntry> custom_parameters = new ArrayList<>();
     }
     public static class OllamaApi{
@@ -59,7 +76,7 @@ public class ItemTranslateConfig {
         public String keep_alive_time = "1m";
         public double temperature = 0.7;
         public String system_prompt_suffix = "\\no_think";
-        @Comment("Custom parameters to be sent with the API request")
+        @ConfigEntry.Gui.Tooltip
         public List<CustomParameterEntry> custom_parameters = new ArrayList<>();
     }
 }

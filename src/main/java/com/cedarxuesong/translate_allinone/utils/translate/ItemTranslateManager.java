@@ -1,7 +1,7 @@
 package com.cedarxuesong.translate_allinone.utils.translate;
 
 import com.cedarxuesong.translate_allinone.Translate_AllinOne;
-import com.cedarxuesong.translate_allinone.utils.cache.TextTemplateCache;
+import com.cedarxuesong.translate_allinone.utils.cache.ItemTemplateCache;
 import com.cedarxuesong.translate_allinone.utils.config.pojos.ItemTranslateConfig;
 import com.cedarxuesong.translate_allinone.utils.llmapi.LLM;
 import com.cedarxuesong.translate_allinone.utils.llmapi.ProviderSettings;
@@ -29,7 +29,7 @@ public class ItemTranslateManager {
     private ExecutorService workerExecutor;
     private ScheduledExecutorService collectorExecutor;
     private ScheduledExecutorService rateLimiterExecutor;
-    private final TextTemplateCache cache = TextTemplateCache.getInstance();
+    private final ItemTemplateCache cache = ItemTemplateCache.getInstance();
     private Semaphore rateLimiter;
     private int currentRpm = -1;
     private int currentConcurrentRequests = -1;

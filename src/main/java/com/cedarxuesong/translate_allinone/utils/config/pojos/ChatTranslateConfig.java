@@ -7,31 +7,31 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ChatTranslateConfig {
-    @Comment("Enable chat translation feature")
+    @ConfigEntry.Gui.Tooltip
     public boolean enabled = false;
 
-    @Comment("Automatically translate incoming chat messages without clicking the button")
+    @ConfigEntry.Gui.Tooltip
     public boolean auto_translate = false;
 
-    @Comment("The target language for translation")
+    @ConfigEntry.Gui.Tooltip
     public String target_language = "Chinese";
 
 
-    @Comment("Receive the translated response in a streaming fashion")
+    @ConfigEntry.Gui.Tooltip
     public boolean streaming_response = false;
 
-    @Comment("Large Language Model Suppliers (Click to Switch)")
+    @ConfigEntry.Gui.Tooltip
     @ConfigEntry.Gui.EnumHandler(option = ConfigEntry.Gui.EnumHandler.EnumDisplayOption.BUTTON)
     public Provider llm_provider = Provider.OPENAI;
 
-    @Comment("Maximum number of concurrent translation tasks. Be careful with high values, as it may trigger API rate limits.")
+    @ConfigEntry.Gui.Tooltip(count = 2)
     @ConfigEntry.BoundedDiscrete(min = 1, max = 10)
     public int max_concurrent_requests = 1;
 
     @ConfigEntry.Gui.CollapsibleObject(startExpanded = true)
     public OpenaiApi openapi = new OpenaiApi();
 
-    @ConfigEntry.Gui.CollapsibleObject
+    @ConfigEntry.Gui.CollapsibleObject(startExpanded = true)
     public OllamaApi ollama = new OllamaApi();
 
     public static class OpenaiApi{
@@ -41,7 +41,7 @@ public class ChatTranslateConfig {
         public String modelId = "gpt-4o";
         public double temperature = 0.7;
         public String system_prompt_suffix = "\\no_think";
-        @Comment("Custom parameters to be sent with the API request")
+        @ConfigEntry.Gui.Tooltip
         public List<CustomParameterEntry> custom_parameters = new ArrayList<>();
     }
     public static class OllamaApi{
@@ -51,7 +51,7 @@ public class ChatTranslateConfig {
         public String keep_alive_time = "1m";
         public double temperature = 0.7;
         public String system_prompt_suffix = "\\no_think";
-        @Comment("Custom parameters to be sent with the API request")
+        @ConfigEntry.Gui.Tooltip
         public List<CustomParameterEntry> custom_parameters = new ArrayList<>();
     }
 } 

@@ -4,6 +4,7 @@ import com.cedarxuesong.translate_allinone.utils.AnimationManager;
 import com.cedarxuesong.translate_allinone.utils.cache.ScoreboardTextCache;
 import com.cedarxuesong.translate_allinone.utils.config.ModConfig;
 import com.cedarxuesong.translate_allinone.utils.config.pojos.ScoreboardConfig;
+import com.cedarxuesong.translate_allinone.utils.input.KeybindingManager;
 import com.cedarxuesong.translate_allinone.utils.text.StylePreserver;
 import com.cedarxuesong.translate_allinone.utils.text.TemplateProcessor;
 import me.shedaniel.autoconfig.AutoConfig;
@@ -74,6 +75,25 @@ public class InGameHudMixin {
         try {
             ScoreboardConfig config = AutoConfig.getConfigHolder(ModConfig.class).getConfig().scoreboardTranslate;
             if (!config.enabled) {
+                translate_allinone$scoreboardReplacements.set(null);
+                return;
+            }
+
+            boolean isKeyPressed = KeybindingManager.scoreboardTranslateKey.isPressed();
+            boolean shouldShowOriginal = false;
+
+            switch (config.keybinding.mode) {
+                case HOLD_TO_TRANSLATE:
+                    if (!isKeyPressed) shouldShowOriginal = true;
+                    break;
+                case HOLD_TO_SEE_ORIGINAL:
+                    if (isKeyPressed) shouldShowOriginal = true;
+                    break;
+                case DISABLED:
+                    break;
+            }
+
+            if (shouldShowOriginal) {
                 translate_allinone$scoreboardReplacements.set(null);
                 return;
             }

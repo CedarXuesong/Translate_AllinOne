@@ -1,6 +1,7 @@
 package com.cedarxuesong.translate_allinone.mixin.mixinChatHud;
 
 import com.cedarxuesong.translate_allinone.Translate_AllinOne;
+import com.cedarxuesong.translate_allinone.registration.LifecycleEventManager;
 import com.cedarxuesong.translate_allinone.utils.AnimationManager;
 import com.cedarxuesong.translate_allinone.utils.MessageUtils;
 import com.cedarxuesong.translate_allinone.utils.config.ModConfig;
@@ -26,7 +27,7 @@ public abstract class ChatHudMixin {
 
     @ModifyVariable(method = "addMessage(Lnet/minecraft/text/Text;Lnet/minecraft/network/message/MessageSignatureData;Lnet/minecraft/client/gui/hud/MessageIndicator;)V", at = @At("HEAD"), argsOnly = true)
     private Text onAddMessage(Text message) {
-        if (isModifyingMessage.get() || !Translate_AllinOne.isReadyForTranslation) {
+        if (isModifyingMessage.get() || !LifecycleEventManager.isReadyForTranslation) {
             return message;
         }
 

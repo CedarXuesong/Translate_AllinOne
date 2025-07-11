@@ -9,7 +9,6 @@ import me.shedaniel.autoconfig.annotation.Config;
 import me.shedaniel.autoconfig.annotation.ConfigEntry;
 
 @Config(name = Translate_AllinOne.MOD_ID + "/" + Translate_AllinOne.MOD_ID)
-@Config.Gui.Background("minecraft:textures/block/amethyst_block.png")
 public class ModConfig implements ConfigData {
 
     @ConfigEntry.Category("chat_translate")
