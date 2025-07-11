@@ -120,7 +120,7 @@ public class TextTemplateCache {
         // Atomically check and add.
         // If the key was not already in the set, add it to the pending queue.
         if (allQueuedOrInProgressKeys.add(originalTemplate)) {
-            pendingQueue.offer(originalTemplate);
+        pendingQueue.offer(originalTemplate);
         }
         return "";
     }
