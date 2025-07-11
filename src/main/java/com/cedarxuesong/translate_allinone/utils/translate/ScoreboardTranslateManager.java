@@ -209,19 +209,7 @@ public class ScoreboardTranslateManager {
         ProviderSettings settings = ProviderSettings.fromScoreboardConfig(config);
         LLM llm = new LLM(settings);
 
-        String systemPrompt = "You are a translation assistant. You will receive a JSON object, where the keys are numeric IDs and the values are the text to be translated. Translate these values into " + config.target_language + ". Use the same numeric IDs as keys and the translated text as values, and in the response, only provide the JSON object, retaining all formatting characters, retaining words or nouns that are uncertain to translate.";
-
-        String suffix = "";
-        if (config.llm_provider == com.cedarxuesong.translate_allinone.utils.config.pojos.Provider.OPENAI) {
-            suffix = config.openapi.system_prompt_suffix;
-        } else if (config.llm_provider == com.cedarxuesong.translate_allinone.utils.config.pojos.Provider.OLLAMA) {
-            suffix = config.ollama.system_prompt_suffix;
-        }
-
-        if (suffix != null && !suffix.trim().isEmpty()) {
-            systemPrompt += " " + suffix.replace("\\n", "\n");
-        }
-        
+        String systemPrompt = "You are a translation assistant. You will be provided with a JSON object where keys are numeric IDs and values are the texts to be translated. Translate the values into " + config.target_language + ". Respond with a valid JSON object using the same numeric IDs as keys and the translated texts as values. Provide only the JSON object in your response, without any additional explanations or markdown formatting.";
         String userPrompt = "JSON:" + GSON.toJson(batchForAI);
 
         List<OpenAIRequest.Message> messages = List.of(

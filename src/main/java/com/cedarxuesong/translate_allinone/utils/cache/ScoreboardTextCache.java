@@ -109,7 +109,7 @@ public class ScoreboardTextCache {
         }
     }
 
-    public synchronized String getOrQueue(String originalTemplate) {
+    public String getOrQueue(String originalTemplate) {
         if (templateCache.containsKey(originalTemplate)) {
             String translation = templateCache.get(originalTemplate);
             if (translation != null && !translation.isEmpty()) {
@@ -117,12 +117,11 @@ public class ScoreboardTextCache {
             }
         }
 
-        if (allQueuedOrInProgressKeys.contains(originalTemplate)) {
-            return "";
+        // Atomically check and add.
+        // If the key was not already in the set, add it to the pending queue.
+        if (allQueuedOrInProgressKeys.add(originalTemplate)) {
+            pendingQueue.offer(originalTemplate);
         }
-
-        allQueuedOrInProgressKeys.add(originalTemplate);
-        pendingQueue.offer(originalTemplate);
         return "";
     }
 
