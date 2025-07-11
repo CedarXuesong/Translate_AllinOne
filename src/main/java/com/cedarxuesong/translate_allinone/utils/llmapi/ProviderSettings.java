@@ -7,6 +7,7 @@ import com.cedarxuesong.translate_allinone.utils.config.pojos.ChatTranslateConfi
 import com.cedarxuesong.translate_allinone.utils.config.pojos.CustomParameterEntry;
 import com.cedarxuesong.translate_allinone.utils.config.pojos.ItemTranslateConfig;
 import com.cedarxuesong.translate_allinone.utils.config.pojos.Provider;
+import com.cedarxuesong.translate_allinone.utils.config.pojos.ScoreboardConfig;
 
 /**
  * 一个用于封装不同翻译提供商API设置的记录。
@@ -23,6 +24,36 @@ public record ProviderSettings(OpenAISettings openAISettings, OllamaSettings oll
     }
 
     public static ProviderSettings fromItemConfig(ItemTranslateConfig config) {
+        if (config.llm_provider == Provider.OPENAI) {
+            Map<String, Object> customParams = config.openapi.custom_parameters.stream()
+                    .collect(Collectors.toMap(p -> p.key, p -> convertParameterValue(p.value)));
+            OpenAISettings settings = new OpenAISettings(
+                    config.openapi.baseUrl,
+                    config.openapi.apiKey,
+                    config.openapi.modelId,
+                    config.openapi.temperature,
+                    customParams
+            );
+            return new ProviderSettings(settings, null);
+        } else if (config.llm_provider == Provider.OLLAMA) {
+            Map<String, Object> options = new java.util.HashMap<>();
+            options.put("temperature", config.ollama.temperature);
+            if (config.ollama.custom_parameters != null) {
+                config.ollama.custom_parameters.forEach(p -> options.put(p.key, convertParameterValue(p.value)));
+            }
+            
+            OllamaSettings settings = new OllamaSettings(
+                    config.ollama.ollamaUrl,
+                    config.ollama.modelId,
+                    config.ollama.keep_alive_time,
+                    options
+            );
+            return new ProviderSettings(null, settings);
+        }
+        return new ProviderSettings(null, null);
+    }
+
+    public static ProviderSettings fromScoreboardConfig(ScoreboardConfig config) {
         if (config.llm_provider == Provider.OPENAI) {
             Map<String, Object> customParams = config.openapi.custom_parameters.stream()
                     .collect(Collectors.toMap(p -> p.key, p -> convertParameterValue(p.value)));

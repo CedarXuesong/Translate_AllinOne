@@ -1,8 +1,8 @@
 package com.cedarxuesong.translate_allinone.utils.translate;
 
 import com.cedarxuesong.translate_allinone.Translate_AllinOne;
-import com.cedarxuesong.translate_allinone.utils.cache.TextTemplateCache;
-import com.cedarxuesong.translate_allinone.utils.config.pojos.ItemTranslateConfig;
+import com.cedarxuesong.translate_allinone.utils.cache.ScoreboardTextCache;
+import com.cedarxuesong.translate_allinone.utils.config.pojos.ScoreboardConfig;
 import com.cedarxuesong.translate_allinone.utils.llmapi.LLM;
 import com.cedarxuesong.translate_allinone.utils.llmapi.ProviderSettings;
 import com.cedarxuesong.translate_allinone.utils.llmapi.openai.OpenAIRequest;
@@ -21,15 +21,15 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.concurrent.ExecutorService;
 
-public class ItemTranslateManager {
-    private static final ItemTranslateManager INSTANCE = new ItemTranslateManager();
+public class ScoreboardTranslateManager {
+    private static final ScoreboardTranslateManager INSTANCE = new ScoreboardTranslateManager();
     private static final Gson GSON = new Gson();
     private static final Pattern JSON_EXTRACT_PATTERN = Pattern.compile("\\{.*\\}", Pattern.DOTALL);
 
     private ExecutorService workerExecutor;
     private ScheduledExecutorService collectorExecutor;
     private ScheduledExecutorService rateLimiterExecutor;
-    private final TextTemplateCache cache = TextTemplateCache.getInstance();
+    private final ScoreboardTextCache cache = ScoreboardTextCache.getInstance();
     private Semaphore rateLimiter;
     private int currentRpm = -1;
     private int currentConcurrentRequests = -1;
@@ -37,9 +37,9 @@ public class ItemTranslateManager {
 
     public record RateLimitStatus(boolean isRateLimited, long estimatedWaitSeconds) {}
 
-    private ItemTranslateManager() {}
+    private ScoreboardTranslateManager() {}
 
-    public static ItemTranslateManager getInstance() {
+    public static ScoreboardTranslateManager getInstance() {
         return INSTANCE;
     }
 
@@ -54,19 +54,19 @@ public class ItemTranslateManager {
 
     public void start() {
         if (workerExecutor == null || workerExecutor.isShutdown()) {
-            ItemTranslateConfig config = Translate_AllinOne.getConfig().itemTranslate;
+            ScoreboardConfig config = Translate_AllinOne.getConfig().scoreboardTranslate;
             currentConcurrentRequests = Math.max(1, config.max_concurrent_requests);
             workerExecutor = Executors.newFixedThreadPool(currentConcurrentRequests);
             for (int i = 0; i < currentConcurrentRequests; i++) {
                 workerExecutor.submit(this::processingLoop);
             }
-            Translate_AllinOne.LOGGER.info("ItemTranslateManager started with {} worker threads.", currentConcurrentRequests);
+            Translate_AllinOne.LOGGER.info("ScoreboardTranslateManager started with {} worker threads.", currentConcurrentRequests);
         }
 
         if (collectorExecutor == null || collectorExecutor.isShutdown()) {
             collectorExecutor = Executors.newSingleThreadScheduledExecutor();
             collectorExecutor.scheduleAtFixedRate(this::collectAndBatchItems, 0, 1, TimeUnit.SECONDS);
-            Translate_AllinOne.LOGGER.info("Item translation collector started.");
+            Translate_AllinOne.LOGGER.info("Scoreboard translation collector started.");
         }
 
         updateRateLimiter();
@@ -82,20 +82,20 @@ public class ItemTranslateManager {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-            Translate_AllinOne.LOGGER.info("ItemTranslateManager's processing threads stopped.");
+            Translate_AllinOne.LOGGER.info("ScoreboardTranslateManager's processing threads stopped.");
         }
         if (collectorExecutor != null && !collectorExecutor.isShutdown()) {
             collectorExecutor.shutdownNow();
-            Translate_AllinOne.LOGGER.info("Item translation collector stopped.");
+            Translate_AllinOne.LOGGER.info("Scoreboard translation collector stopped.");
         }
         if (rateLimiterExecutor != null && !rateLimiterExecutor.isShutdown()) {
             rateLimiterExecutor.shutdownNow();
-            Translate_AllinOne.LOGGER.info("ItemTranslateManager's rate limiter thread stopped.");
+            Translate_AllinOne.LOGGER.info("ScoreboardTranslateManager's rate limiter thread stopped.");
         }
     }
 
     private void updateRateLimiter() {
-        ItemTranslateConfig config = Translate_AllinOne.getConfig().itemTranslate;
+        ScoreboardConfig config = Translate_AllinOne.getConfig().scoreboardTranslate;
         int newRpm = config.requests_per_minute;
         int newConcurrentRequests = Math.max(1, config.max_concurrent_requests);
 
@@ -108,7 +108,6 @@ public class ItemTranslateManager {
             }
 
             if (currentRpm > 0) {
-                // The burst size is calculated as the number of requests allowed in 2 seconds.
                 final int burstSize = Math.max(1, currentRpm / 30);
                 rateLimiter = new Semaphore(burstSize, true);
 
@@ -125,11 +124,11 @@ public class ItemTranslateManager {
                     nextPermitReleaseTime = System.currentTimeMillis() + delayBetweenPermits;
                 }, delayBetweenPermits, delayBetweenPermits, TimeUnit.MILLISECONDS);
 
-                Translate_AllinOne.LOGGER.info("Rate limiter updated to {} RPM (1 permit every {}ms), initial permits: {}.", currentRpm, delayBetweenPermits, burstSize);
+                Translate_AllinOne.LOGGER.info("Scoreboard rate limiter updated to {} RPM (1 permit every {}ms), initial permits: {}.", currentRpm, delayBetweenPermits, burstSize);
             } else {
                 rateLimiter = null; // No limit
                 nextPermitReleaseTime = 0;
-                Translate_AllinOne.LOGGER.info("Rate limiter disabled.");
+                Translate_AllinOne.LOGGER.info("Scoreboard rate limiter disabled.");
             }
         }
     }
@@ -137,7 +136,7 @@ public class ItemTranslateManager {
     private void processingLoop() {
         while (!Thread.currentThread().isInterrupted()) {
             try {
-                ItemTranslateConfig config = Translate_AllinOne.getConfig().itemTranslate;
+                ScoreboardConfig config = Translate_AllinOne.getConfig().scoreboardTranslate;
                 if (!config.enabled) {
                     TimeUnit.SECONDS.sleep(5);
                     continue;
@@ -164,7 +163,7 @@ public class ItemTranslateManager {
 
     private void collectAndBatchItems() {
         try {
-            ItemTranslateConfig config = Translate_AllinOne.getConfig().itemTranslate;
+            ScoreboardConfig config = Translate_AllinOne.getConfig().scoreboardTranslate;
             if (!config.enabled) {
                 return;
             }
@@ -179,9 +178,9 @@ public class ItemTranslateManager {
                 List<String> batch = new java.util.ArrayList<>(items.subList(i, end));
                 cache.submitBatchForTranslation(batch);
             }
-            Translate_AllinOne.LOGGER.info("Collected and submitted {} batch(es) for translation.", (int) Math.ceil((double) items.size() / batchSize));
+            Translate_AllinOne.LOGGER.info("Collected and submitted {} batch(es) for scoreboard translation.", (int) Math.ceil((double) items.size() / batchSize));
         } catch (Exception e) {
-            Translate_AllinOne.LOGGER.error("Error in collector thread", e);
+            Translate_AllinOne.LOGGER.error("Error in scoreboard collector thread", e);
         }
     }
 
@@ -189,15 +188,15 @@ public class ItemTranslateManager {
         try {
             java.util.Set<String> erroredKeys = cache.getErroredKeys();
             if (!erroredKeys.isEmpty()) {
-                Translate_AllinOne.LOGGER.info("Re-queueing {} errored items for another attempt.", erroredKeys.size());
+                Translate_AllinOne.LOGGER.info("Re-queueing {} errored scoreboard items for another attempt.", erroredKeys.size());
                 erroredKeys.forEach(cache::requeueFromError);
             }
         } catch (Exception e) {
-            Translate_AllinOne.LOGGER.error("Error during scheduled re-queue of errored items", e);
+            Translate_AllinOne.LOGGER.error("Error during scheduled re-queue of errored scoreboard items", e);
         }
     }
 
-    private void translateBatch(List<String> originalTexts, ItemTranslateConfig config) {
+    private void translateBatch(List<String> originalTexts, ScoreboardConfig config) {
         if (originalTexts.isEmpty()) {
             return;
         }
@@ -207,11 +206,11 @@ public class ItemTranslateManager {
             batchForAI.put(String.valueOf(i + 1), originalTexts.get(i));
         }
 
-        ProviderSettings settings = ProviderSettings.fromItemConfig(config);
+        ProviderSettings settings = ProviderSettings.fromScoreboardConfig(config);
         LLM llm = new LLM(settings);
 
         String systemPrompt = "You are a translation assistant. You will receive a JSON object, where the keys are numeric IDs and the values are the text to be translated. Translate these values into " + config.target_language + ". Use the same numeric IDs as keys and the translated text as values, and in the response, only provide the JSON object, retaining all formatting characters, retaining words or nouns that are uncertain to translate.";
-        
+
         String suffix = "";
         if (config.llm_provider == com.cedarxuesong.translate_allinone.utils.config.pojos.Provider.OPENAI) {
             suffix = config.openapi.system_prompt_suffix;
@@ -222,7 +221,7 @@ public class ItemTranslateManager {
         if (suffix != null && !suffix.trim().isEmpty()) {
             systemPrompt += " " + suffix.replace("\\n", "\n");
         }
-
+        
         String userPrompt = "JSON:" + GSON.toJson(batchForAI);
 
         List<OpenAIRequest.Message> messages = List.of(
@@ -232,7 +231,7 @@ public class ItemTranslateManager {
 
         llm.getCompletion(messages).whenComplete((response, error) -> {
             if (error != null) {
-                Translate_AllinOne.LOGGER.error("Failed to get translation from LLM", error);
+                Translate_AllinOne.LOGGER.error("Failed to get scoreboard translation from LLM", error);
                 cache.requeueFailed(new java.util.HashSet<>(originalTexts), error.getMessage());
                 return;
             }
@@ -260,10 +259,10 @@ public class ItemTranslateManager {
                                     finalTranslatedMap.put(originalTemplate, translatedTemplate);
                                 }
                             } else {
-                                Translate_AllinOne.LOGGER.warn("Received out-of-bounds index {} from LLM, skipping.", entry.getKey());
+                                Translate_AllinOne.LOGGER.warn("Received out-of-bounds index {} from LLM for scoreboard, skipping.", entry.getKey());
                             }
                         } catch (NumberFormatException e) {
-                            Translate_AllinOne.LOGGER.warn("Received non-numeric key '{}' from LLM, skipping.", entry.getKey());
+                            Translate_AllinOne.LOGGER.warn("Received non-numeric key '{}' from LLM for scoreboard, skipping.", entry.getKey());
                         }
                     }
 
@@ -272,23 +271,22 @@ public class ItemTranslateManager {
                     }
 
                     if (!itemsToRequeueForColor.isEmpty()) {
-                        Translate_AllinOne.LOGGER.warn("Re-queueing {} item translations that failed color code validation.", itemsToRequeueForColor.size());
+                        Translate_AllinOne.LOGGER.warn("Re-queueing {} scoreboard translations that failed color code validation.", itemsToRequeueForColor.size());
                         cache.requeueFailed(itemsToRequeueForColor, "Missing color codes in translation");
                     }
 
-                    // Re-queue texts that were not successfully translated
                     java.util.Set<String> allOriginalTexts = new java.util.HashSet<>(originalTexts);
                     allOriginalTexts.removeAll(finalTranslatedMap.keySet());
                     allOriginalTexts.removeAll(itemsToRequeueForColor); // remove items already handled
                     if (!allOriginalTexts.isEmpty()) {
-                        Translate_AllinOne.LOGGER.warn("LLM response did not contain all original keys. Re-queueing {} missing translations.", allOriginalTexts.size());
+                        Translate_AllinOne.LOGGER.warn("Scoreboard LLM response did not contain all original keys. Re-queueing {} missing translations.", allOriginalTexts.size());
                         cache.requeueFailed(allOriginalTexts, "LLM response missing keys");
                     }
                 } else {
-                    throw new JsonSyntaxException("No JSON object found in the response.");
+                    throw new JsonSyntaxException("No JSON object found in the scoreboard response.");
                 }
             } catch (JsonSyntaxException e) {
-                Translate_AllinOne.LOGGER.error("Failed to parse JSON response from LLM. Response: {}", response, e);
+                Translate_AllinOne.LOGGER.error("Failed to parse JSON response from LLM for scoreboard. Response: {}", response, e);
                 cache.requeueFailed(new java.util.HashSet<>(originalTexts), "Invalid JSON response");
             }
         });

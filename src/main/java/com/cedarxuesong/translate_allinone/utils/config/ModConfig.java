@@ -22,5 +22,6 @@ public class ModConfig implements ConfigData {
 
     @ConfigEntry.Category("scoreboard_translate")
     @ConfigEntry.Gui.TransitiveObject
-    public ScoreboardConfig scoreboardConfig = new ScoreboardConfig();
+    public ScoreboardConfig scoreboardTranslate = new ScoreboardConfig();
+
 }

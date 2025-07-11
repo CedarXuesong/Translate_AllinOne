@@ -280,8 +280,7 @@ public class ChatHudTranslateCommand {
             suffix = chatConfig.ollama.system_prompt_suffix;
         }
 
-        String systemPrompt = "Translate to " + chatConfig.target_language +
-                ". You will be given text with style tags like `<s0>text</s0>`. Keep these tags wrapping the translated text segments. For example, `<s0>Hello</s0> world` translated to French is `<s0>Bonjour</s0> le monde`. Output translation only." + suffix;
+        String systemPrompt = "You are a chat translation assistant, translating text into " + chatConfig.target_language + ". You will receive text with style tags, such as `s0>text</s0>`. Please keep these tags wrapping the translated text paragraphs. For example, `<s0>Hello</s0> world` translated into French is `<s0>Bonjour</s0> le monde`. Only output the translation result, keeping all formatting characters, and keeping all words that are uncertain to translate." + suffix;
         return List.of(
                 new OpenAIRequest.Message("system", systemPrompt),
                 new OpenAIRequest.Message("user", textToTranslate)

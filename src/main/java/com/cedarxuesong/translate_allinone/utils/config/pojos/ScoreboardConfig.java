@@ -35,10 +35,10 @@ public class ScoreboardConfig {
     public Provider llm_provider = Provider.OPENAI;
 
     @ConfigEntry.Gui.CollapsibleObject(startExpanded = true)
-    public ItemTranslateConfig.OpenaiApi openapi = new ItemTranslateConfig.OpenaiApi();
+    public OpenaiApi openapi = new OpenaiApi();
 
     @ConfigEntry.Gui.CollapsibleObject(startExpanded = true)
-    public ItemTranslateConfig.OllamaApi ollama = new ItemTranslateConfig.OllamaApi();
+    public OllamaApi ollama = new OllamaApi();
 
     public static class OpenaiApi{
         @ConfigEntry.Gui.PrefixText

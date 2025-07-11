@@ -15,6 +15,9 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.cedarxuesong.translate_allinone.utils.cache.ScoreboardTextCache;
+import com.cedarxuesong.translate_allinone.utils.translate.ScoreboardTranslateManager;
+
 public class Translate_AllinOne implements ModInitializer {
 
 	public static final String MOD_ID = "translate_allinone";
@@ -45,6 +48,8 @@ public class Translate_AllinOne implements ModInitializer {
 			LOGGER.info("Player joining world, awaiting client readiness for translation...");
 			TextTemplateCache.getInstance().load();
 			ItemTranslateManager.getInstance().start();
+			ScoreboardTextCache.getInstance().load();
+			ScoreboardTranslateManager.getInstance().start();
 		});
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
@@ -72,6 +77,8 @@ public class Translate_AllinOne implements ModInitializer {
 			LOGGER.info("Player has disconnected. Translation readiness reset.");
 			ItemTranslateManager.getInstance().stop();
 			TextTemplateCache.getInstance().save();
+			ScoreboardTranslateManager.getInstance().stop();
+			ScoreboardTextCache.getInstance().save();
 		});
 	}
 

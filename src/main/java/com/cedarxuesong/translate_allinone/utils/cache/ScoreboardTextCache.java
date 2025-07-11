@@ -21,7 +21,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.stream.Collectors;
 import java.util.ArrayList;
 
-public class TextTemplateCache {
+public class ScoreboardTextCache {
 
     public enum TranslationStatus {
         TRANSLATED,
@@ -33,9 +33,9 @@ public class TextTemplateCache {
 
     public record CacheStats(int translated, int total) {}
 
-    private static final TextTemplateCache INSTANCE = new TextTemplateCache();
+    private static final ScoreboardTextCache INSTANCE = new ScoreboardTextCache();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final String CACHE_FILE_NAME = "item_translate_cache.json";
+    private static final String CACHE_FILE_NAME = "scoreboard_translate_cache.json";
     private final Path cacheFilePath;
     private final Map<String, String> templateCache = new ConcurrentHashMap<>();
     private final Set<String> inProgress = ConcurrentHashMap.newKeySet();
@@ -45,7 +45,7 @@ public class TextTemplateCache {
     private final Map<String, String> errorCache = new ConcurrentHashMap<>();
     private volatile boolean isDirty = false;
 
-    private TextTemplateCache() {
+    private ScoreboardTextCache() {
         this.cacheFilePath = FabricLoader.getInstance().getConfigDir()
                 .resolve(Translate_AllinOne.MOD_ID)
                 .resolve(CACHE_FILE_NAME);
@@ -66,7 +66,7 @@ public class TextTemplateCache {
         return pendingQueue.isEmpty();
     }
 
-    public static TextTemplateCache getInstance() {
+    public static ScoreboardTextCache getInstance() {
         return INSTANCE;
     }
 
@@ -81,13 +81,13 @@ public class TextTemplateCache {
                 Map<String, String> loadedCache = GSON.fromJson(reader, type);
                 if (loadedCache != null) {
                     templateCache.putAll(loadedCache);
-                    Translate_AllinOne.LOGGER.info("Successfully loaded {} item translation cache entries.", templateCache.size());
+                    Translate_AllinOne.LOGGER.info("Successfully loaded {} scoreboard translation cache entries.", templateCache.size());
                 }
             } catch (IOException e) {
-                Translate_AllinOne.LOGGER.error("Failed to load item translation cache", e);
+                Translate_AllinOne.LOGGER.error("Failed to load scoreboard translation cache", e);
             }
         } else {
-            Translate_AllinOne.LOGGER.info("Item translation cache file not found, a new one will be created upon saving.");
+            Translate_AllinOne.LOGGER.info("Scoreboard translation cache file not found, a new one will be created upon saving.");
         }
         isDirty = false;
     }
@@ -101,11 +101,11 @@ public class TextTemplateCache {
             Files.createDirectories(cacheFilePath.getParent());
             try (FileWriter writer = new FileWriter(cacheFilePath.toFile())) {
                 GSON.toJson(templateCache, writer);
-                Translate_AllinOne.LOGGER.info("Successfully saved {} item translation cache entries.", templateCache.size());
+                Translate_AllinOne.LOGGER.info("Successfully saved {} scoreboard translation cache entries.", templateCache.size());
                 isDirty = false;
             }
         } catch (IOException e) {
-            Translate_AllinOne.LOGGER.error("Failed to save item translation cache", e);
+            Translate_AllinOne.LOGGER.error("Failed to save scoreboard translation cache", e);
         }
     }
 
@@ -210,7 +210,7 @@ public class TextTemplateCache {
         finishedKeys.forEach(errorCache::remove);
         
         isDirty = true;
-        Translate_AllinOne.LOGGER.info("Updated {} translations in the cache.", translations.size());
+        Translate_AllinOne.LOGGER.info("Updated {} scoreboard translations in the cache.", translations.size());
          
         save();
     }
@@ -221,6 +221,6 @@ public class TextTemplateCache {
         }
         inProgress.removeAll(failedKeys);
         failedKeys.forEach(key -> errorCache.put(key, errorMessage));
-        Translate_AllinOne.LOGGER.warn("Marked {} keys as errored. They will be retried later.", failedKeys.size());
+        Translate_AllinOne.LOGGER.warn("Marked {} scoreboard keys as errored. They will be retried later.", failedKeys.size());
     }
-}
+} 
