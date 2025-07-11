@@ -48,7 +48,6 @@ We welcome any form of contribution! If you find any bugs or have feature sugges
 ## 📝 To-Do List (TODO)
 
 - [ ] Sidebar Scoreboard Translation
-- [ ] Top Tab Bar Translation
 
 ## 📜 License
 
@@ -104,7 +103,6 @@ This project is licensed under the [MIT License](./LICENSE).
 ## 📝 待办事项 (TODO)
 
 - [ ] 侧边栏计分板翻译
-- [ ] 顶部 Tab 栏翻译
 
 ## 📜 许可证
 
