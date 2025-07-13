@@ -4,7 +4,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import com.cedarxuesong.translate_allinone.utils.config.pojos.ChatTranslateConfig;
-import com.cedarxuesong.translate_allinone.utils.config.pojos.CustomParameterEntry;
 import com.cedarxuesong.translate_allinone.utils.config.pojos.ItemTranslateConfig;
 import com.cedarxuesong.translate_allinone.utils.config.pojos.Provider;
 import com.cedarxuesong.translate_allinone.utils.config.pojos.ScoreboardConfig;
@@ -83,9 +82,9 @@ public record ProviderSettings(OpenAISettings openAISettings, OllamaSettings oll
         return new ProviderSettings(null, null);
     }
 
-    public static ProviderSettings fromChatConfig(ChatTranslateConfig config) {
+    public static ProviderSettings fromChatInputConfig(ChatTranslateConfig.ChatInputTranslateConfig config) {
         if (config.llm_provider == Provider.OLLAMA) {
-            ChatTranslateConfig.OllamaApi ollama = config.ollama;
+            ChatTranslateConfig.ChatInputTranslateConfig.OllamaApi ollama = config.ollama;
             Map<String, Object> options = new java.util.HashMap<>();
             options.put("temperature", ollama.temperature);
             if (ollama.custom_parameters != null) {
@@ -94,7 +93,26 @@ public record ProviderSettings(OpenAISettings openAISettings, OllamaSettings oll
             ProviderSettings.OllamaSettings settings = new ProviderSettings.OllamaSettings(ollama.ollamaUrl, ollama.modelId, ollama.keep_alive_time, options);
             return ProviderSettings.fromOllama(settings);
         } else {
-            ChatTranslateConfig.OpenaiApi openai = config.openapi;
+            ChatTranslateConfig.ChatInputTranslateConfig.OpenaiApi openai = config.openapi;
+            Map<String, Object> customParams = openai.custom_parameters.stream()
+                    .collect(Collectors.toMap(entry -> entry.key, entry -> convertParameterValue(entry.value)));
+            ProviderSettings.OpenAISettings settings = new ProviderSettings.OpenAISettings(openai.baseUrl, openai.apiKey, openai.modelId, openai.temperature, customParams);
+            return ProviderSettings.fromOpenAI(settings);
+        }
+    }
+
+    public static ProviderSettings fromChatOutputConfig(ChatTranslateConfig.ChatOutputTranslateConfig config) {
+        if (config.llm_provider == Provider.OLLAMA) {
+            ChatTranslateConfig.ChatOutputTranslateConfig.OllamaApi ollama = config.ollama;
+            Map<String, Object> options = new java.util.HashMap<>();
+            options.put("temperature", ollama.temperature);
+            if (ollama.custom_parameters != null) {
+                ollama.custom_parameters.forEach(p -> options.put(p.key, convertParameterValue(p.value)));
+            }
+            ProviderSettings.OllamaSettings settings = new ProviderSettings.OllamaSettings(ollama.ollamaUrl, ollama.modelId, ollama.keep_alive_time, options);
+            return ProviderSettings.fromOllama(settings);
+        } else {
+            ChatTranslateConfig.ChatOutputTranslateConfig.OpenaiApi openai = config.openapi;
             Map<String, Object> customParams = openai.custom_parameters.stream()
                     .collect(Collectors.toMap(entry -> entry.key, entry -> convertParameterValue(entry.value)));
             ProviderSettings.OpenAISettings settings = new ProviderSettings.OpenAISettings(openai.baseUrl, openai.apiKey, openai.modelId, openai.temperature, customParams);

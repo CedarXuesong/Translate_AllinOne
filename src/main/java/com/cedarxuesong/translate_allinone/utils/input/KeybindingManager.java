@@ -8,20 +8,28 @@ import org.lwjgl.glfw.GLFW;
 public class KeybindingManager {
     public static KeyBinding itemTranslateKey;
     public static KeyBinding scoreboardTranslateKey;
+    public static KeyBinding chatInputTranslateKey;
 
     public static void register() {
         itemTranslateKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.translate_allinone.item_translate_key", // The translation key of the keybinding's name
-                InputUtil.Type.KEYSYM, // The type of the keybinding, KEYSYM for keyboard, MOUSE for mouse.
-                InputUtil.UNKNOWN_KEY.getCode(), // The default keycode of the keybinding.
-                "category.translate_allinone.keybindings" // The translation key of the keybinding's category.
+                "key.translate_allinone.item_translate_key",
+                InputUtil.Type.KEYSYM,
+                InputUtil.UNKNOWN_KEY.getCode(),
+                "category.translate_allinone.keybindings"
         ));
 
         scoreboardTranslateKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.translate_allinone.scoreboard_translate_key", // The translation key of the keybinding's name
-                InputUtil.Type.KEYSYM, // The type of the keybinding, KEYSYM for keyboard, MOUSE for mouse.
-                InputUtil.UNKNOWN_KEY.getCode(), // The default keycode of the keybinding.
-                "category.translate_allinone.keybindings" // The translation key of the keybinding's category.
+                "key.translate_allinone.scoreboard_translate_key",
+                InputUtil.Type.KEYSYM,
+                InputUtil.UNKNOWN_KEY.getCode(), 
+                "category.translate_allinone.keybindings" 
+        ));
+
+        chatInputTranslateKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.translate_allinone.chat_input_translate_key",
+                InputUtil.Type.KEYSYM,
+                InputUtil.UNKNOWN_KEY.getCode(),
+                "category.translate_allinone.keybindings"
         ));
     }
 } 

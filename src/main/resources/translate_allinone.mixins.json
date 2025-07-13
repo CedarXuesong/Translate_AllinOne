@@ -10,7 +10,8 @@
     "mixinChatHud.ChatHudMixin",
     "mixinItem.ItemStackMixin",
     "mixinInGameGui.InGameHudMixin",
-    "mixinInGameGui.InGameHudAccessor"
+    "mixinInGameGui.InGameHudAccessor",
+    "mixinChatScreen.ChatScreenMixin"
   ],
   "injectors": {
     "defaultRequire": 1

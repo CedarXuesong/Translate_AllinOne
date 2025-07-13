@@ -35,7 +35,7 @@ public abstract class ChatHudMixin {
             isModifyingMessage.set(true);
 
         ModConfig config = AutoConfig.getConfigHolder(ModConfig.class).getConfig();
-        if (config.chatTranslate.enabled) {
+        if (config.chatTranslate.output.enabled) {
                 String plainText = AnimationManager.stripFormatting(message.getString()).trim();
                 if (plainText.isEmpty()) {
                     return message;
@@ -44,7 +44,7 @@ public abstract class ChatHudMixin {
             UUID messageId = UUID.randomUUID();
             MessageUtils.MESSAGES_BY_UUID.put(messageId, message);
 
-                if (config.chatTranslate.auto_translate) {
+                if (config.chatTranslate.output.auto_translate) {
                     MinecraftClient.getInstance().execute(() -> {
                         if (MinecraftClient.getInstance().player != null) {
                             MinecraftClient.getInstance().player.networkHandler.sendCommand("translate_allinone translatechatline " + messageId);

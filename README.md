@@ -10,12 +10,13 @@ A powerful in-game AI real-time translation mod for Minecraft, based on Fabric.
 
 ## ✨ Features
 
-- **Chat Translation**: Real-time translation of chat messages, supporting streaming responses for a seamless communication experience.
+- **Chat Output Translation**: Real-time translation of incoming chat messages, supporting streaming responses for a seamless communication experience.
+- **Chat Input Translation**: Translate your own messages via a hotkey before sending them, with real-time feedback in the input field (supports streaming).
 - **Item Translation**: Automatically translates item names and descriptions (Lore), supporting template caching, efficient and resource-saving.
 - **Scoreboard Translation**: Real-time translation of sidebar scoreboard content.
 - **Highly Configurable**: Through the in-game menu (requires [ModMenu](https://www.curseforge.com/minecraft/mc-mods/modmenu)), you can easily configure:
     - Support for multiple AI service providers (OpenAI, Ollama).
-    - Set independent translation models and parameters for different functions (chat, items, scoreboard).
+    - Set independent translation models and parameters for different functions (chat output, chat input, items, scoreboard).
     - Configure keybinding modes for item and scoreboard translation.
     - Customize API address, key, model ID, etc.
 - **Smart Caching**: Automatically caches translation results, reducing repeated requests and improving performance.
@@ -43,7 +44,7 @@ This mod uses the Cloth Config API to provide a detailed configuration interface
   - Model Temperature (Temperature)
   - Other custom parameters
 - **Keybinding Settings**:
-  - Configure behavior for item and scoreboard translation (e.g., Hold to Translate, Hold for Original).
+  - Configure keybindings for chat input, and behavior for item and scoreboard translation (e.g., Hold to Translate, Hold for Original).
   - Keys must be configured in Minecraft's main Controls menu.
 
 ## 🤝 Contribution
@@ -53,6 +54,7 @@ We welcome any form of contribution! If you find any bugs or have feature sugges
 ## 📝 To-Do List (TODO)
 
 - [x] Sidebar Scoreboard Translation
+- [x] Chat Input Translation
 
 ## 📜 License
 
@@ -70,12 +72,13 @@ This project is licensed under the [MIT License](./LICENSE).
 
 ## ✨ 功能特性
 
-- **聊天翻译**: 实时翻译聊天信息，支持流式响应，带来无缝的交流体验。
+- **聊天输出翻译**: 实时翻译接收到的聊天信息，支持流式响应，带来无缝的交流体验。
+- **聊天输入翻译**: 通过快捷键在发送前翻译您自己的消息，并在输入框中实时反馈（支持流式响应）。
 - **物品翻译**: 自动翻译物品的名称和描述 (Lore)，支持模板缓存，高效且节省资源。
 - **计分板翻译**: 实时翻译侧边栏计分板内容。
 - **高度可配置**: 通过游戏内菜单 (需要 [ModMenu](https://www.curseforge.com/minecraft/mc-mods/modmenu))，您可以轻松配置：
     - 支持多种 AI 服务商 (OpenAI, Ollama)。
-    - 为不同功能（聊天、物品、计分板）设置独立的翻译模型和参数。
+    - 为不同功能（聊天输出、聊天输入、物品、计分板）设置独立的翻译模型和参数。
     - 为物品和计分板翻译配置快捷键模式。
     - 自定义 API 地址、密钥、模型 ID 等。
 - **智能缓存**: 自动缓存翻译结果，减少重复请求，提升性能。
@@ -103,7 +106,7 @@ This project is licensed under the [MIT License](./LICENSE).
   - 模型温度 (Temperature)
   - 其他自定义参数
 - **快捷键设置**:
-  - 为物品和计分板翻译配置行为模式（例如，按住翻译、按住查看原文）。
+  - 为聊天输入、物品和计分板翻译配置快捷键和行为模式（例如，按住翻译、按住查看原文）。
   - 快捷键本身需要在 Minecraft 的主“控制”菜单中设置。
 
 ## 🤝 贡献
@@ -113,6 +116,7 @@ This project is licensed under the [MIT License](./LICENSE).
 ## 📝 待办事项 (TODO)
 
 - [x] 侧边栏计分板翻译
+- [x] 聊天输入翻译
 
 ## 📜 许可证
 
