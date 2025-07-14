@@ -57,4 +57,3 @@ replay_*.log
 ### 项目特定忽略 ###
 # 项目文档目录
 /doc/
-/remappedSrc/
