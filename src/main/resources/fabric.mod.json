@@ -5,15 +5,15 @@
 	"name": "Translate All in One",
 	"description": "一款为 Minecraft 打造的功能强大的游戏内 AI 实时翻译模组，基于 Fabric。",
 	"authors": [
-		"cedarxuesong"
+		"CedarXuesong"
 	],
 	"contact": {
-		"homepage": "https://github.com/cedarxuesong/Translate_AllinOne",
-		"sources": "https://github.com/cedarxuesong/Translate_AllinOne"
+		"homepage": "https://github.com/CedarXuesong/Translate_AllinOne",
+		"sources": "https://github.com/CedarXuesong/Translate_AllinOne"
 	},
 	"license": "MIT",
 	"icon": "assets/translate_allinone/icon.png",
-	"environment": "*",
+	"environment": "Client",
 	"entrypoints": {
 		"main": [
 			"com.cedarxuesong.translate_allinone.Translate_AllinOne"
@@ -30,9 +30,8 @@
 		"minecraft": "~1.21.5",
 		"java": ">=21",
 		"fabric-api": "*",
-		"cloth-config": ">=18.0.145"
-	},
-	"suggests": {
-		"modmenu": ">=11.0.0-beta.1"
+		"cloth-config": ">=18.0.145",
+		"modmenu": ">=14.0.0-rc.2"
 	}
+
 }
