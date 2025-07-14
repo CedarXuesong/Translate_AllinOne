@@ -54,8 +54,8 @@ public abstract class ChatHudMixin {
                 } else {
             MutableText translateButton = Text.literal(" [T]");
             Style style = Style.EMPTY
-                    .withClickEvent(new ClickEvent.RunCommand("/translate_allinone translatechatline " + messageId))
-                    .withHoverEvent(new HoverEvent.ShowText(Text.translatable("text.translate_allinone.translate_button_hover")));
+                    .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/translate_allinone translatechatline " + messageId))
+                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.translatable("text.translate_allinone.translate_button_hover")));
             translateButton.setStyle(style);
 
             return Text.empty().append(message).append(translateButton);
