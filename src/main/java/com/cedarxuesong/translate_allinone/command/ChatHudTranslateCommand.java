@@ -23,9 +23,15 @@ public class ChatHudTranslateCommand {
 
     private static int run(CommandContext<FabricClientCommandSource> context) {
         String messageIdStr = StringArgumentType.getString(context, "messageId");
-        UUID messageId = UUID.fromString(messageIdStr);
+        UUID messageId;
+        try {
+            messageId = UUID.fromString(messageIdStr);
+        } catch (IllegalArgumentException e) {
+            context.getSource().sendError(Text.literal("Invalid message ID: " + messageIdStr));
+            return 0;
+        }
 
-        Text originalMessage = MessageUtils.MESSAGES_BY_UUID.get(messageId);
+        Text originalMessage = MessageUtils.getTrackedMessage(messageId);
         if (originalMessage == null) {
             context.getSource().sendError(Text.literal("Message not found for ID: " + messageIdStr));
             return 0;

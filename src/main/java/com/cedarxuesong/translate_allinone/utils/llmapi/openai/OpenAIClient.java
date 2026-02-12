@@ -104,11 +104,11 @@ public class OpenAIClient {
                     .filter(chunk -> chunk != null && chunk.choices != null && !chunk.choices.isEmpty() && chunk.choices.get(0).delta != null && chunk.choices.get(0).delta.content != null);
 
         } catch (Exception e) {
-            Translate_AllinOne.LOGGER.error("请求OpenAI流式API时出错", e);
-            if (e instanceof LLMApiException) {
-                throw (LLMApiException) e; // 重新抛出，让调用者也能感知
+            if (e instanceof LLMApiException llmApiException) {
+                throw llmApiException;
             }
-            return Stream.empty();
+            Translate_AllinOne.LOGGER.error("请求OpenAI流式API时出错", e);
+            throw new LLMApiException("请求OpenAI流式API时出错", e);
         }
     }
-} 
+}

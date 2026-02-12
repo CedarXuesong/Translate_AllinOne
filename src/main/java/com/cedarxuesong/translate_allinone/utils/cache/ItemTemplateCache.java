@@ -72,6 +72,9 @@ public class ItemTemplateCache {
         templateCache.clear();
         pendingQueue.clear();
         inProgress.clear();
+        batchWorkQueue.clear();
+        allQueuedOrInProgressKeys.clear();
+        errorCache.clear();
 
         if (Files.exists(cacheFilePath)) {
             try (FileReader reader = new FileReader(cacheFilePath.toFile())) {

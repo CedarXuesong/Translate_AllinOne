@@ -1,7 +1,6 @@
 package com.cedarxuesong.translate_allinone.utils.config.pojos;
 
 import me.shedaniel.autoconfig.annotation.ConfigEntry;
-import me.shedaniel.cloth.clothconfig.shadowed.blue.endless.jankson.Comment;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -62,6 +61,8 @@ public class ScoreboardConfig {
         public String apiKey = "sk-xxxxxx";
         public String modelId = "gpt-4o";
         public double temperature = 0.7;
+        @ConfigEntry.Gui.Tooltip
+        public boolean enable_structured_output_if_available = false;
         public String system_prompt_suffix = "\\no_think";
         @ConfigEntry.Gui.Tooltip
         public List<CustomParameterEntry> custom_parameters = new ArrayList<>();
@@ -72,6 +73,8 @@ public class ScoreboardConfig {
         public String modelId = "qwen3:0.6b";
         public String keep_alive_time = "1m";
         public double temperature = 0.7;
+        @ConfigEntry.Gui.Tooltip
+        public boolean enable_structured_output_if_available = false;
         public String system_prompt_suffix = "\\no_think";
         @ConfigEntry.Gui.Tooltip
         public List<CustomParameterEntry> custom_parameters = new ArrayList<>();

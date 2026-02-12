@@ -3,6 +3,7 @@ package com.cedarxuesong.translate_allinone.utils.translate;
 import com.cedarxuesong.translate_allinone.Translate_AllinOne;
 import com.cedarxuesong.translate_allinone.utils.cache.ItemTemplateCache;
 import com.cedarxuesong.translate_allinone.utils.config.pojos.ItemTranslateConfig;
+import com.cedarxuesong.translate_allinone.utils.config.pojos.Provider;
 import com.cedarxuesong.translate_allinone.utils.llmapi.LLM;
 import com.cedarxuesong.translate_allinone.utils.llmapi.ProviderSettings;
 import com.cedarxuesong.translate_allinone.utils.llmapi.openai.OpenAIRequest;
@@ -136,6 +137,7 @@ public class ItemTranslateManager {
 
     private void processingLoop() {
         while (!Thread.currentThread().isInterrupted()) {
+            List<String> batch = null;
             try {
                 ItemTranslateConfig config = Translate_AllinOne.getConfig().itemTranslate;
                 if (!config.enabled) {
@@ -143,7 +145,7 @@ public class ItemTranslateManager {
                     continue;
                 }
                 
-                List<String> batch = cache.takeBatchForTranslation();
+                batch = cache.takeBatchForTranslation();
                 cache.markAsInProgress(batch);
 
                 if (rateLimiter != null) {
@@ -153,10 +155,16 @@ public class ItemTranslateManager {
                 translateBatch(batch, config);
 
             } catch (InterruptedException e) {
+                if (batch != null && !batch.isEmpty()) {
+                    cache.requeueFailed(new java.util.HashSet<>(batch), "Processing thread interrupted");
+                }
                 Thread.currentThread().interrupt();
                 Translate_AllinOne.LOGGER.info("Processing thread interrupted, shutting down.");
                 break;
             } catch (Exception e) {
+                if (batch != null && !batch.isEmpty()) {
+                    cache.requeueFailed(new java.util.HashSet<>(batch), "Processing loop failure: " + e.getMessage());
+                }
                 Translate_AllinOne.LOGGER.error("An unexpected error occurred in the processing loop, continuing.", e);
             }
         }
@@ -210,8 +218,8 @@ public class ItemTranslateManager {
         ProviderSettings settings = ProviderSettings.fromItemConfig(config);
         LLM llm = new LLM(settings);
 
-        String systemPrompt = "You are a translation assistant. You will be provided with a JSON object where keys are numeric IDs and values are the texts to be translated. Translate the values into " + config.target_language + ". Respond with a valid JSON object using the same numeric IDs as keys and the translated texts as values. Provide only the JSON object in your response, without any additional explanations or markdown formatting.";
-        String userPrompt = "JSON:" + GSON.toJson(batchForAI);
+        String systemPrompt = buildSystemPrompt(config);
+        String userPrompt = "JSON:\n" + GSON.toJson(batchForAI);
 
         List<OpenAIRequest.Message> messages = List.of(
                 new OpenAIRequest.Message("system", systemPrompt),
@@ -231,9 +239,13 @@ public class ItemTranslateManager {
                     String jsonResponse = matcher.group();
                     Type type = new TypeToken<Map<String, String>>() {}.getType();
                     Map<String, String> translatedMapFromAI = GSON.fromJson(jsonResponse, type);
+                    if (translatedMapFromAI == null) {
+                        throw new JsonSyntaxException("Parsed translation result is null");
+                    }
 
                     Map<String, String> finalTranslatedMap = new java.util.HashMap<>();
                     java.util.Set<String> itemsToRequeueForColor = new java.util.HashSet<>();
+                    java.util.Set<String> itemsToRequeueForEmpty = new java.util.HashSet<>();
 
                     for (Map.Entry<String, String> entry : translatedMapFromAI.entrySet()) {
                         try {
@@ -241,6 +253,11 @@ public class ItemTranslateManager {
                             if (index >= 0 && index < originalTexts.size()) {
                                 String originalTemplate = originalTexts.get(index);
                                 String translatedTemplate = entry.getValue();
+
+                                if (translatedTemplate == null || translatedTemplate.trim().isEmpty()) {
+                                    itemsToRequeueForEmpty.add(originalTemplate);
+                                    continue;
+                                }
 
                                 if (originalTemplate.contains("§") && !translatedTemplate.contains("§")) {
                                     itemsToRequeueForColor.add(originalTemplate);
@@ -264,10 +281,16 @@ public class ItemTranslateManager {
                         cache.requeueFailed(itemsToRequeueForColor, "Missing color codes in translation");
                     }
 
+                    if (!itemsToRequeueForEmpty.isEmpty()) {
+                        Translate_AllinOne.LOGGER.warn("Re-queueing {} item translations that returned empty values.", itemsToRequeueForEmpty.size());
+                        cache.requeueFailed(itemsToRequeueForEmpty, "Empty translation response");
+                    }
+
                     // Re-queue texts that were not successfully translated
                     java.util.Set<String> allOriginalTexts = new java.util.HashSet<>(originalTexts);
                     allOriginalTexts.removeAll(finalTranslatedMap.keySet());
                     allOriginalTexts.removeAll(itemsToRequeueForColor); // remove items already handled
+                    allOriginalTexts.removeAll(itemsToRequeueForEmpty);
                     if (!allOriginalTexts.isEmpty()) {
                         Translate_AllinOne.LOGGER.warn("LLM response did not contain all original keys. Re-queueing {} missing translations.", allOriginalTexts.size());
                         cache.requeueFailed(allOriginalTexts, "LLM response missing keys");
@@ -281,4 +304,24 @@ public class ItemTranslateManager {
             }
         });
     }
-} 
+
+    private String buildSystemPrompt(ItemTranslateConfig config) {
+        String suffix = getSystemPromptSuffix(config);
+        String basePrompt = "Translate each JSON value to " + config.target_language
+                + ". Return JSON only. Keep all keys unchanged. Preserve formatting and tokens exactly"
+                + " (e.g. §a §l §r <...> {...} %s %d %f \\n \\t URLs numbers)."
+                + " If unsure, keep the original value.";
+        return basePrompt + suffix;
+    }
+
+    private String getSystemPromptSuffix(ItemTranslateConfig config) {
+        if (config.llm_provider == Provider.OPENAI) {
+            return config.openapi != null && config.openapi.system_prompt_suffix != null
+                    ? config.openapi.system_prompt_suffix
+                    : "";
+        }
+        return config.ollama != null && config.ollama.system_prompt_suffix != null
+                ? config.ollama.system_prompt_suffix
+                : "";
+    }
+}

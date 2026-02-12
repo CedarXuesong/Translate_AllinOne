@@ -42,12 +42,13 @@ public abstract class ChatHudMixin {
                 }
 
             UUID messageId = UUID.randomUUID();
-            MessageUtils.MESSAGES_BY_UUID.put(messageId, message);
+            MessageUtils.putTrackedMessage(messageId, message);
 
                 if (config.chatTranslate.output.auto_translate) {
                     MinecraftClient.getInstance().execute(() -> {
-                        if (MinecraftClient.getInstance().player != null) {
-                            MinecraftClient.getInstance().player.networkHandler.sendCommand("translate_allinone translatechatline " + messageId);
+                        if (MinecraftClient.getInstance().player != null
+                                && MinecraftClient.getInstance().player.networkHandler != null) {
+                            MinecraftClient.getInstance().player.networkHandler.sendChatCommand("translate_allinone translatechatline " + messageId);
                         }
                     });
                     return message;

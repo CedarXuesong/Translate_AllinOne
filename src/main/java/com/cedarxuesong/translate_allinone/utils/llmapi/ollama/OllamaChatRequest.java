@@ -14,12 +14,18 @@ public class OllamaChatRequest {
     public boolean stream;
     public Map<String, Object> options;
     public String keep_alive;
+    public String format;
 
-    public OllamaChatRequest(String model, List<OpenAIRequest.Message> messages, boolean stream, String keep_alive, Map<String, Object> options) {
+    public OllamaChatRequest(String model, List<OpenAIRequest.Message> messages, boolean stream, String keep_alive, Map<String, Object> options, String format) {
         this.model = model;
         this.messages = messages;
         this.stream = stream;
         this.keep_alive = keep_alive;
         this.options = options;
+        this.format = format;
+    }
+
+    public OllamaChatRequest(String model, List<OpenAIRequest.Message> messages, boolean stream, String keep_alive, Map<String, Object> options) {
+        this(model, messages, stream, keep_alive, options, null);
     }
 } 

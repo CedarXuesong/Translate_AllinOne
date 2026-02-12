@@ -2,13 +2,14 @@
   "required": true,
   "minVersion": "0.8",
   "package": "com.cedarxuesong.translate_allinone.mixin",
-  "compatibilityLevel": "JAVA_17",
+  "compatibilityLevel": "JAVA_21",
   "mixins": [
   ],
   "client": [
     "mixinChatHud.ChatHudAccessor",
     "mixinChatHud.ChatHudMixin",
-    "mixinItem.ItemStackMixin",
+    "mixinItem.KeyBindingAccessor",
+    "mixinItem.DrawContextItemTooltipMixin",
     "mixinInGameGui.InGameHudMixin",
     "mixinInGameGui.InGameHudAccessor",
     "mixinChatScreen.ChatScreenMixin"

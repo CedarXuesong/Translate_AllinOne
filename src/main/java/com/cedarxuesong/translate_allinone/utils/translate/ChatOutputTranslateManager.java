@@ -78,7 +78,7 @@ public class ChatOutputTranslateManager {
 
         if (targetLine == null) {
             LOGGER.error("Could not find chat line to update for messageId: {}", messageId);
-            MessageUtils.MESSAGES_BY_UUID.remove(messageId);
+            MessageUtils.removeTrackedMessage(messageId);
             return;
         }
 
@@ -241,7 +241,7 @@ public class ChatOutputTranslateManager {
                 chatHudAccessor.invokeRefresh();
                 chatHudAccessor.setScrolledLines(scrolledLines);
             }
-            MessageUtils.MESSAGES_BY_UUID.remove(messageId);
+            MessageUtils.removeTrackedMessage(messageId);
         });
     }
 

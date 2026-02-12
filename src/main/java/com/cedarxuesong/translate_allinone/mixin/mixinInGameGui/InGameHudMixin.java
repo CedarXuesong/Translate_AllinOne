@@ -141,17 +141,17 @@ public class InGameHudMixin {
             method = "renderScoreboardSidebar(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/scoreboard/ScoreboardObjective;)V",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/client/gui/DrawContext;drawText(Lnet/minecraft/client/font/TextRenderer;Lnet/minecraft/text/Text;IIIZ)I",
+                    target = "Lnet/minecraft/client/gui/DrawContext;drawText(Lnet/minecraft/client/font/TextRenderer;Lnet/minecraft/text/Text;IIIZ)V",
                     ordinal = 1
             )
     )
-    private int redirectNameDraw(DrawContext instance, TextRenderer textRenderer, Text text, int x, int y, int color, boolean shadow) {
+    private void redirectNameDraw(DrawContext instance, TextRenderer textRenderer, Text text, int x, int y, int color, boolean shadow) {
         Map<Text, Text> replacements = translate_allinone$scoreboardReplacements.get();
         Text textToDraw = text;
         if (replacements != null && replacements.containsKey(text)) {
             textToDraw = replacements.get(text);
         }
-        return instance.drawText(textRenderer, textToDraw, x, y, color, true);
+        instance.drawText(textRenderer, textToDraw, x, y, color, true);
     }
 
     @Inject(
