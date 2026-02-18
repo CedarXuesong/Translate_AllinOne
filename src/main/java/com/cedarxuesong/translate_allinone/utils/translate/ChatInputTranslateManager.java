@@ -1,12 +1,12 @@
 package com.cedarxuesong.translate_allinone.utils.translate;
 
-import com.cedarxuesong.translate_allinone.utils.config.ModConfig;
+import com.cedarxuesong.translate_allinone.Translate_AllinOne;
+import com.cedarxuesong.translate_allinone.utils.config.ProviderRouteResolver;
+import com.cedarxuesong.translate_allinone.utils.config.pojos.ApiProviderProfile;
 import com.cedarxuesong.translate_allinone.utils.config.pojos.ChatTranslateConfig;
-import com.cedarxuesong.translate_allinone.utils.config.pojos.Provider;
 import com.cedarxuesong.translate_allinone.utils.llmapi.LLM;
 import com.cedarxuesong.translate_allinone.utils.llmapi.ProviderSettings;
 import com.cedarxuesong.translate_allinone.utils.llmapi.openai.OpenAIRequest;
-import me.shedaniel.autoconfig.AutoConfig;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.text.Text;
@@ -38,8 +38,8 @@ public class ChatInputTranslateManager {
             return; // Already translating
         }
 
-        ModConfig config = AutoConfig.getConfigHolder(ModConfig.class).getConfig();
-        if (!config.chatTranslate.input.enabled) {
+        ChatTranslateConfig.ChatInputTranslateConfig inputConfig = Translate_AllinOne.getConfig().chatTranslate.input;
+        if (!inputConfig.enabled) {
             isTranslating.set(false);
             return;
         }
@@ -53,11 +53,21 @@ public class ChatInputTranslateManager {
 
 
         executor.submit(() -> {
+            String requestContext = "route=chat_input";
             try {
-                ChatTranslateConfig.ChatInputTranslateConfig inputConfig = config.chatTranslate.input;
-                ProviderSettings settings = ProviderSettings.fromChatInputConfig(inputConfig);
+                ApiProviderProfile providerProfile = ProviderRouteResolver.resolve(
+                        Translate_AllinOne.getConfig(),
+                        ProviderRouteResolver.Route.CHAT_INPUT
+                );
+                if (providerProfile == null) {
+                    throw new IllegalStateException("No routed model selected for chat input translation");
+                }
+
+                ProviderSettings settings = ProviderSettings.fromProviderProfile(providerProfile);
                 LLM llm = new LLM(settings);
-                List<OpenAIRequest.Message> apiMessages = getMessages(inputConfig, originalTextRef.get());
+
+                List<OpenAIRequest.Message> apiMessages = getMessages(providerProfile, inputConfig.target_language, originalTextRef.get());
+                requestContext = buildRequestContext(providerProfile, inputConfig.target_language, originalTextRef.get(), apiMessages, inputConfig.streaming_response);
 
                 if (inputConfig.streaming_response) {
                     final StringBuilder rawResponseBuffer = new StringBuilder();
@@ -129,7 +139,7 @@ public class ChatInputTranslateManager {
                     });
                 }
             } catch (Exception e) {
-                LOGGER.error("[Chat-Input-Translate] Exception during translation", e);
+                LOGGER.error("[Chat-Input-Translate] Exception during translation. context={}", requestContext, e);
                 MinecraftClient.getInstance().execute(() -> {
                     Text errorMessage = Text.literal("Chat Input Translation Error: " + e.getMessage()).formatted(Formatting.RED);
                     MinecraftClient.getInstance().inGameHud.getChatHud().addMessage(errorMessage);
@@ -144,18 +154,66 @@ public class ChatInputTranslateManager {
     }
 
     @NotNull
-    private static List<OpenAIRequest.Message> getMessages(ChatTranslateConfig.ChatInputTranslateConfig inputConfig, String textToTranslate) {
-        String suffix;
-        if (inputConfig.llm_provider == Provider.OPENAI) {
-            suffix = inputConfig.openapi.system_prompt_suffix;
-        } else {
-            suffix = inputConfig.ollama.system_prompt_suffix;
-        }
-
-        String systemPrompt = "You are a chat translation assistant, translating user input text into " + inputConfig.target_language + ". Only output the translation result." + suffix;
-        return List.of(
-                new OpenAIRequest.Message("system", systemPrompt),
-                new OpenAIRequest.Message("user", textToTranslate)
+    private static List<OpenAIRequest.Message> getMessages(ApiProviderProfile providerProfile, String targetLanguage, String textToTranslate) {
+        String systemPrompt = PromptMessageBuilder.appendSystemPromptSuffix(
+                "You are a deterministic translation engine.\n"
+                        + "Target language: " + targetLanguage + ".\n"
+                        + "\n"
+                        + "Rules (highest priority first):\n"
+                        + "1) Output only the final translated text. No explanation, markdown, or quotes.\n"
+                        + "2) Preserve tokens exactly: § color/style codes, placeholders (%s %d %f {d1}), URLs, numbers, command prefix (/), <...>, {...}, \\n, \\t.\n"
+                        + "3) If a term is uncertain, keep only that term unchanged and still translate surrounding text.\n"
+                        + "4) Keep punctuation and spacing stable unless translation naturally requires changes.\n"
+                        + "5) If any rule cannot be guaranteed, return the original input unchanged.",
+                providerProfile.activeSystemPromptSuffix()
+        );
+        return PromptMessageBuilder.buildMessages(
+                systemPrompt,
+                textToTranslate,
+                providerProfile.activeSupportsSystemMessage(),
+                providerProfile.model_id,
+                providerProfile.activeInjectSystemPromptIntoUserMessage()
         );
     }
-} 
+
+    private static String buildRequestContext(
+            ApiProviderProfile profile,
+            String targetLanguage,
+            String originalText,
+            List<OpenAIRequest.Message> messages,
+            boolean streaming
+    ) {
+        String providerId = profile == null ? "" : profile.id;
+        String modelId = profile == null ? "" : profile.model_id;
+        int messageCount = messages == null ? 0 : messages.size();
+        String roles = messages == null
+                ? "[]"
+                : messages.stream().map(message -> message == null ? "null" : String.valueOf(message.role)).collect(java.util.stream.Collectors.joining(",", "[", "]"));
+        String sample = truncate(normalizeWhitespace(originalText), 160);
+        return "route=chat_input"
+                + ", provider=" + providerId
+                + ", model=" + modelId
+                + ", target=" + (targetLanguage == null ? "" : targetLanguage)
+                + ", streaming=" + streaming
+                + ", messages=" + messageCount
+                + ", roles=" + roles
+                + ", sample=\"" + sample + "\"";
+    }
+
+    private static String normalizeWhitespace(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').trim();
+    }
+
+    private static String truncate(String value, int maxLength) {
+        if (value == null) {
+            return "";
+        }
+        if (value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, Math.max(0, maxLength - 3)) + "...";
+    }
+}

@@ -1,13 +1,12 @@
 package com.cedarxuesong.translate_allinone.mixin.mixinInGameGui;
 
+import com.cedarxuesong.translate_allinone.Translate_AllinOne;
 import com.cedarxuesong.translate_allinone.utils.AnimationManager;
 import com.cedarxuesong.translate_allinone.utils.cache.ScoreboardTextCache;
-import com.cedarxuesong.translate_allinone.utils.config.ModConfig;
 import com.cedarxuesong.translate_allinone.utils.config.pojos.ScoreboardConfig;
 import com.cedarxuesong.translate_allinone.utils.input.KeybindingManager;
 import com.cedarxuesong.translate_allinone.utils.text.StylePreserver;
 import com.cedarxuesong.translate_allinone.utils.text.TemplateProcessor;
-import me.shedaniel.autoconfig.AutoConfig;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.hud.InGameHud;
@@ -29,6 +28,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 @Mixin(InGameHud.class)
@@ -37,7 +37,10 @@ public class InGameHudMixin {
     private static final Logger LOGGER = LoggerFactory.getLogger("Translate_AllinOne/InGameHudMixin");
 
     @Unique
-    private static final ThreadLocal<Map<Text, Text>> translate_allinone$scoreboardReplacements = new ThreadLocal<>();
+    private static final String MISSING_KEY_HINT = "missing key";
+
+    @Unique
+    private static final ThreadLocal<Map<String, Text>> translate_allinone$scoreboardReplacements = new ThreadLocal<>();
 
     @Unique
     private Text translate_allinone$processTextForTranslation(Text originalText) {
@@ -57,14 +60,29 @@ public class InGameHudMixin {
         if (status == ScoreboardTextCache.TranslationStatus.TRANSLATED) {
             String reassembledTranslated = TemplateProcessor.reassemble(translatedTemplate, templateResult.values);
             return StylePreserver.fromLegacyText(reassembledTranslated);
-        } else if (status == ScoreboardTextCache.TranslationStatus.ERROR) {
-            MutableText errorText = Text.literal("Error: " + cache.getError(legacyTemplateKey)).formatted(Formatting.RED);
-            return errorText;
-        } else {
-            String reassembledOriginal = TemplateProcessor.reassemble(unicodeTemplate, templateResult.values);
-            Text originalTextObject = StylePreserver.reapplyStyles(reassembledOriginal, styleResult.styleMap);
-            return AnimationManager.getAnimatedStyledText(originalTextObject);
         }
+
+        String reassembledOriginal = TemplateProcessor.reassemble(unicodeTemplate, templateResult.values);
+        Text originalTextObject = StylePreserver.reapplyStyles(reassembledOriginal, styleResult.styleMap);
+
+        if (status == ScoreboardTextCache.TranslationStatus.ERROR) {
+            String errorMessage = cache.getError(legacyTemplateKey);
+            if (translate_allinone$isMissingKeyIssue(errorMessage)) {
+                return AnimationManager.getAnimatedStyledText(originalTextObject, legacyTemplateKey, true);
+            }
+            MutableText errorText = Text.literal("Error: " + errorMessage).formatted(Formatting.RED);
+            return errorText;
+        }
+
+        return AnimationManager.getAnimatedStyledText(originalTextObject, legacyTemplateKey, false);
+    }
+
+    @Unique
+    private static boolean translate_allinone$isMissingKeyIssue(String errorMessage) {
+        if (errorMessage == null || errorMessage.isEmpty()) {
+            return false;
+        }
+        return errorMessage.toLowerCase(Locale.ROOT).contains(MISSING_KEY_HINT);
     }
 
     @Inject(
@@ -73,13 +91,13 @@ public class InGameHudMixin {
     )
     private void onRenderScoreboardSidebarHead(DrawContext drawContext, ScoreboardObjective objective, CallbackInfo ci) {
         try {
-            ScoreboardConfig config = AutoConfig.getConfigHolder(ModConfig.class).getConfig().scoreboardTranslate;
+            ScoreboardConfig config = Translate_AllinOne.getConfig().scoreboardTranslate;
             if (!config.enabled) {
                 translate_allinone$scoreboardReplacements.set(null);
                 return;
             }
 
-            boolean isKeyPressed = KeybindingManager.scoreboardTranslateKey.isPressed();
+            boolean isKeyPressed = KeybindingManager.isPressed(config.keybinding.binding);
             boolean shouldShowOriginal = false;
 
             switch (config.keybinding.mode) {
@@ -100,7 +118,7 @@ public class InGameHudMixin {
 
             Scoreboard scoreboard = objective.getScoreboard();
             Comparator<ScoreboardEntry> comparator = InGameHudAccessor.getScoreboardEntryComparator();
-            Map<Text, Text> replacements = new HashMap<>();
+            Map<String, Text> replacements = new HashMap<>();
 
             scoreboard.getScoreboardEntries(objective).stream()
                     .filter(score -> !score.hidden())
@@ -108,7 +126,8 @@ public class InGameHudMixin {
                     .limit(15L)
                     .forEach(scoreboardEntry -> {
                         Team team = scoreboard.getScoreHolderTeam(scoreboardEntry.owner());
-                        Text originalDecoratedName = Team.decorateName(team, scoreboardEntry.name());
+                        Text plainOwnerName = Text.literal(scoreboardEntry.owner());
+                        String originalDecoratedNameKey = Team.decorateName(team, plainOwnerName).getString();
 
                         MutableText newName = Text.empty();
                         if (team != null) {
@@ -116,7 +135,7 @@ public class InGameHudMixin {
                             newName.append(prefix);
 
                             if (config.enabled_translate_player_name) {
-                                newName.append(scoreboardEntry.name());
+                                newName.append(plainOwnerName);
                             }
                             
                             Text suffix = config.enabled_translate_prefix_and_suffix_name ? translate_allinone$processTextForTranslation(team.getSuffix()) : team.getSuffix();
@@ -124,10 +143,10 @@ public class InGameHudMixin {
 
                         } else {
                             if (config.enabled_translate_player_name) {
-                                newName.append(scoreboardEntry.name());
+                                newName.append(plainOwnerName);
                             }
                         }
-                        replacements.put(originalDecoratedName, newName);
+                        replacements.put(originalDecoratedNameKey, newName);
                     });
 
             translate_allinone$scoreboardReplacements.set(replacements);
@@ -146,10 +165,13 @@ public class InGameHudMixin {
             )
     )
     private void redirectNameDraw(DrawContext instance, TextRenderer textRenderer, Text text, int x, int y, int color, boolean shadow) {
-        Map<Text, Text> replacements = translate_allinone$scoreboardReplacements.get();
+        Map<String, Text> replacements = translate_allinone$scoreboardReplacements.get();
         Text textToDraw = text;
-        if (replacements != null && replacements.containsKey(text)) {
-            textToDraw = replacements.get(text);
+        if (replacements != null) {
+            Text replacement = replacements.get(text.getString());
+            if (replacement != null) {
+                textToDraw = replacement;
+            }
         }
         instance.drawText(textRenderer, textToDraw, x, y, color, true);
     }

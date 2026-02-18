@@ -2,8 +2,9 @@ package com.cedarxuesong.translate_allinone.utils.translate;
 
 import com.cedarxuesong.translate_allinone.Translate_AllinOne;
 import com.cedarxuesong.translate_allinone.utils.cache.ItemTemplateCache;
+import com.cedarxuesong.translate_allinone.utils.config.ProviderRouteResolver;
+import com.cedarxuesong.translate_allinone.utils.config.pojos.ApiProviderProfile;
 import com.cedarxuesong.translate_allinone.utils.config.pojos.ItemTranslateConfig;
-import com.cedarxuesong.translate_allinone.utils.config.pojos.Provider;
 import com.cedarxuesong.translate_allinone.utils.llmapi.LLM;
 import com.cedarxuesong.translate_allinone.utils.llmapi.ProviderSettings;
 import com.cedarxuesong.translate_allinone.utils.llmapi.openai.OpenAIRequest;
@@ -13,6 +14,7 @@ import com.google.gson.reflect.TypeToken;
 
 import java.lang.reflect.Type;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -26,6 +28,7 @@ public class ItemTranslateManager {
     private static final ItemTranslateManager INSTANCE = new ItemTranslateManager();
     private static final Gson GSON = new Gson();
     private static final Pattern JSON_EXTRACT_PATTERN = Pattern.compile("\\{.*\\}", Pattern.DOTALL);
+    private static final int MAX_KEY_MISMATCH_BATCH_RETRIES = 1;
 
     private ExecutorService workerExecutor;
     private ScheduledExecutorService collectorExecutor;
@@ -206,6 +209,10 @@ public class ItemTranslateManager {
     }
 
     private void translateBatch(List<String> originalTexts, ItemTranslateConfig config) {
+        translateBatch(originalTexts, config, 0);
+    }
+
+    private void translateBatch(List<String> originalTexts, ItemTranslateConfig config, int keyMismatchRetryCount) {
         if (originalTexts.isEmpty()) {
             return;
         }
@@ -215,20 +222,46 @@ public class ItemTranslateManager {
             batchForAI.put(String.valueOf(i + 1), originalTexts.get(i));
         }
 
-        ProviderSettings settings = ProviderSettings.fromItemConfig(config);
+        ApiProviderProfile providerProfile = ProviderRouteResolver.resolve(
+                Translate_AllinOne.getConfig(),
+                ProviderRouteResolver.Route.ITEM
+        );
+        if (providerProfile == null) {
+            Translate_AllinOne.LOGGER.warn("No routed provider/model configured for item translation; re-queueing {} items.", originalTexts.size());
+            cache.requeueFailed(new java.util.HashSet<>(originalTexts), "No routed model selected");
+            return;
+        }
+
+        ProviderSettings settings = ProviderSettings.fromProviderProfile(providerProfile);
         LLM llm = new LLM(settings);
 
-        String systemPrompt = buildSystemPrompt(config);
-        String userPrompt = "JSON:\n" + GSON.toJson(batchForAI);
+        String systemPrompt = buildSystemPrompt(config.target_language, providerProfile.activeSystemPromptSuffix());
+        String userPrompt = GSON.toJson(batchForAI);
 
-        List<OpenAIRequest.Message> messages = List.of(
-                new OpenAIRequest.Message("system", systemPrompt),
-                new OpenAIRequest.Message("user", userPrompt)
+        List<OpenAIRequest.Message> messages = PromptMessageBuilder.buildMessages(
+                systemPrompt,
+                userPrompt,
+                providerProfile.activeSupportsSystemMessage(),
+                providerProfile.model_id,
+                providerProfile.activeInjectSystemPromptIntoUserMessage()
         );
+        String requestContext = buildRequestContext(providerProfile, config.target_language, originalTexts, messages);
 
         llm.getCompletion(messages).whenComplete((response, error) -> {
             if (error != null) {
-                Translate_AllinOne.LOGGER.error("Failed to get translation from LLM", error);
+                if (isInternalPostprocessError(error) && originalTexts.size() > 1) {
+                    Translate_AllinOne.LOGGER.warn(
+                            "Item batch translation hit internal post-process error, retrying as single-item batches. context={} batchSize={}",
+                            requestContext,
+                            originalTexts.size()
+                    );
+                    for (String text : originalTexts) {
+                        translateBatch(List.of(text), config);
+                    }
+                    return;
+                }
+
+                Translate_AllinOne.LOGGER.error("Failed to get translation from LLM. context={}", requestContext, error);
                 cache.requeueFailed(new java.util.HashSet<>(originalTexts), error.getMessage());
                 return;
             }
@@ -241,6 +274,26 @@ public class ItemTranslateManager {
                     Map<String, String> translatedMapFromAI = GSON.fromJson(jsonResponse, type);
                     if (translatedMapFromAI == null) {
                         throw new JsonSyntaxException("Parsed translation result is null");
+                    }
+
+                    if (hasKeyMismatch(translatedMapFromAI, originalTexts.size())) {
+                        if (keyMismatchRetryCount < MAX_KEY_MISMATCH_BATCH_RETRIES) {
+                            int nextAttempt = keyMismatchRetryCount + 1;
+                            Translate_AllinOne.LOGGER.warn(
+                                    "Item translation keys mismatched, retrying full batch. attempt={}/{} context={}",
+                                    nextAttempt,
+                                    MAX_KEY_MISMATCH_BATCH_RETRIES,
+                                    requestContext
+                            );
+                            translateBatch(new java.util.ArrayList<>(originalTexts), config, nextAttempt);
+                        } else {
+                            Translate_AllinOne.LOGGER.warn(
+                                    "Item translation keys mismatched after retries, re-queueing full batch. context={}",
+                                    requestContext
+                            );
+                            cache.requeueFailed(new java.util.HashSet<>(originalTexts), "LLM response key mismatch");
+                        }
+                        return;
                     }
 
                     Map<String, String> finalTranslatedMap = new java.util.HashMap<>();
@@ -305,23 +358,127 @@ public class ItemTranslateManager {
         });
     }
 
-    private String buildSystemPrompt(ItemTranslateConfig config) {
-        String suffix = getSystemPromptSuffix(config);
-        String basePrompt = "Translate each JSON value to " + config.target_language
-                + ". Return JSON only. Keep all keys unchanged. Preserve formatting and tokens exactly"
-                + " (e.g. §a §l §r <...> {...} %s %d %f \\n \\t URLs numbers)."
-                + " If unsure, keep the original value.";
-        return basePrompt + suffix;
+    private boolean hasKeyMismatch(Map<String, String> translatedMapFromAI, int expectedSize) {
+        java.util.Set<String> expectedKeys = new java.util.LinkedHashSet<>();
+        for (int i = 1; i <= expectedSize; i++) {
+            expectedKeys.add(String.valueOf(i));
+        }
+
+        java.util.Set<String> actualKeys = new java.util.LinkedHashSet<>(translatedMapFromAI.keySet());
+        java.util.Set<String> missingKeys = new java.util.LinkedHashSet<>(expectedKeys);
+        missingKeys.removeAll(actualKeys);
+
+        java.util.Set<String> extraKeys = new java.util.LinkedHashSet<>(actualKeys);
+        extraKeys.removeAll(expectedKeys);
+
+        if (missingKeys.isEmpty() && extraKeys.isEmpty()) {
+            return false;
+        }
+
+        Translate_AllinOne.LOGGER.warn(
+                "Item translation key mismatch. expectedCount={}, actualCount={}, missing={}, extra={}",
+                expectedKeys.size(),
+                actualKeys.size(),
+                summarizeKeys(missingKeys),
+                summarizeKeys(extraKeys)
+        );
+        return true;
     }
 
-    private String getSystemPromptSuffix(ItemTranslateConfig config) {
-        if (config.llm_provider == Provider.OPENAI) {
-            return config.openapi != null && config.openapi.system_prompt_suffix != null
-                    ? config.openapi.system_prompt_suffix
-                    : "";
+    private String summarizeKeys(java.util.Set<String> keys) {
+        if (keys == null || keys.isEmpty()) {
+            return "[]";
         }
-        return config.ollama != null && config.ollama.system_prompt_suffix != null
-                ? config.ollama.system_prompt_suffix
-                : "";
+        final int limit = 8;
+        java.util.List<String> sample = new java.util.ArrayList<>(limit);
+        int count = 0;
+        for (String key : keys) {
+            if (count++ >= limit) {
+                break;
+            }
+            sample.add(key);
+        }
+        if (keys.size() <= limit) {
+            return sample.toString();
+        }
+        return sample + "...(+" + (keys.size() - limit) + ")";
+    }
+
+    private String buildSystemPrompt(String targetLanguage, String suffix) {
+        String basePrompt = "You are a deterministic JSON value translator.\n"
+                + "Target language: " + targetLanguage + ".\n"
+                + "\n"
+                + "Input is a JSON object with string keys and string values.\n"
+                + "Output must be one valid JSON object only.\n"
+                + "\n"
+                + "Rules:\n"
+                + "1) Keep all keys unchanged.\n"
+                + "2) Keep key count unchanged.\n"
+                + "3) Translate values only.\n"
+                + "4) Preserve tokens exactly: §a §l §r %s %d %f {d1} URLs numbers <...> {...} \\n \\t.\n"
+                + "5) If unsure for a value, keep that value unchanged.\n"
+                + "6) No extra text outside JSON.";
+        return PromptMessageBuilder.appendSystemPromptSuffix(basePrompt, suffix);
+    }
+
+    private boolean isInternalPostprocessError(Throwable throwable) {
+        Throwable root = unwrapThrowable(throwable);
+        if (root == null || root.getMessage() == null) {
+            return false;
+        }
+        String message = root.getMessage().toLowerCase(Locale.ROOT);
+        return message.contains("internalpostprocesserror")
+                || message.contains("internal error during model post-process")
+                || message.contains("translation failed due to internal error");
+    }
+
+    private Throwable unwrapThrowable(Throwable throwable) {
+        Throwable current = throwable;
+        while (current instanceof java.util.concurrent.CompletionException && current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current;
+    }
+
+    private String buildRequestContext(
+            ApiProviderProfile profile,
+            String targetLanguage,
+            List<String> originalTexts,
+            List<OpenAIRequest.Message> messages
+    ) {
+        String providerId = profile == null ? "" : profile.id;
+        String modelId = profile == null ? "" : profile.model_id;
+        int messageCount = messages == null ? 0 : messages.size();
+        String roles = messages == null
+                ? "[]"
+                : messages.stream().map(message -> message == null ? "null" : String.valueOf(message.role)).collect(java.util.stream.Collectors.joining(",", "[", "]"));
+        int customParamCount = profile == null ? 0 : profile.activeCustomParameters().size();
+        String sample = originalTexts == null || originalTexts.isEmpty() ? "" : truncate(normalizeWhitespace(originalTexts.get(0)), 160);
+        return "route=item"
+                + ", provider=" + providerId
+                + ", model=" + modelId
+                + ", target=" + (targetLanguage == null ? "" : targetLanguage)
+                + ", batch=" + (originalTexts == null ? 0 : originalTexts.size())
+                + ", messages=" + messageCount
+                + ", roles=" + roles
+                + ", custom_params=" + customParamCount
+                + ", sample=\"" + sample + "\"";
+    }
+
+    private String normalizeWhitespace(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').trim();
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null) {
+            return "";
+        }
+        if (value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, Math.max(0, maxLength - 3)) + "...";
     }
 }

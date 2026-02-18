@@ -1,16 +1,16 @@
 package com.cedarxuesong.translate_allinone.utils.translate;
 
+import com.cedarxuesong.translate_allinone.Translate_AllinOne;
 import com.cedarxuesong.translate_allinone.mixin.mixinChatHud.ChatHudAccessor;
 import com.cedarxuesong.translate_allinone.utils.AnimationManager;
 import com.cedarxuesong.translate_allinone.utils.MessageUtils;
-import com.cedarxuesong.translate_allinone.utils.config.ModConfig;
+import com.cedarxuesong.translate_allinone.utils.config.ProviderRouteResolver;
+import com.cedarxuesong.translate_allinone.utils.config.pojos.ApiProviderProfile;
 import com.cedarxuesong.translate_allinone.utils.config.pojos.ChatTranslateConfig;
-import com.cedarxuesong.translate_allinone.utils.config.pojos.Provider;
 import com.cedarxuesong.translate_allinone.utils.llmapi.LLM;
 import com.cedarxuesong.translate_allinone.utils.llmapi.ProviderSettings;
 import com.cedarxuesong.translate_allinone.utils.llmapi.openai.OpenAIRequest;
 import com.cedarxuesong.translate_allinone.utils.text.StylePreserver;
-import me.shedaniel.autoconfig.AutoConfig;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.hud.ChatHud;
 import net.minecraft.client.gui.hud.ChatHudLine;
@@ -26,18 +26,23 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ChatOutputTranslateManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(ChatOutputTranslateManager.class);
     private static final Map<UUID, ChatHudLine> activeTranslationLines = new ConcurrentHashMap<>();
+    private static final Map<UUID, Integer> lineLocateRetryCounts = new ConcurrentHashMap<>();
     private static ExecutorService translationExecutor;
     private static int currentConcurrentRequests = -1;
+    private static final int MAX_LINE_LOCATE_RETRIES = 4;
+    private static final long LINE_LOCATE_RETRY_DELAY_MS = 40L;
 
     private static synchronized void updateExecutorServiceIfNeeded() {
-        int configuredConcurrentRequests = AutoConfig.getConfigHolder(ModConfig.class).getConfig().chatTranslate.output.max_concurrent_requests;
+        int configuredConcurrentRequests = Translate_AllinOne.getConfig().chatTranslate.output.max_concurrent_requests;
         if (translationExecutor == null || configuredConcurrentRequests != currentConcurrentRequests) {
             if (translationExecutor != null) {
                 translationExecutor.shutdown();
@@ -55,6 +60,7 @@ public class ChatOutputTranslateManager {
 
     public static void translate(UUID messageId, Text originalMessage) {
         if (activeTranslationLines.containsKey(messageId)) {
+            lineLocateRetryCounts.remove(messageId);
             return; // Already being translated
         }
 
@@ -62,31 +68,39 @@ public class ChatOutputTranslateManager {
         ChatHud chatHud = client.inGameHud.getChatHud();
         ChatHudAccessor chatHudAccessor = (ChatHudAccessor) chatHud;
         List<ChatHudLine> messages = chatHudAccessor.getMessages();
-        int lineIndex = -1;
-        ChatHudLine targetLine = null;
+        LineSearchResult searchResult = findTargetLine(messages, originalMessage);
 
-        for (int i = 0; i < messages.size(); i++) {
-            ChatHudLine line = messages.get(i);
-            Text lineContent = line.content();
-
-            if (lineContent.equals(originalMessage) || (!lineContent.getSiblings().isEmpty() && lineContent.getSiblings().get(0).equals(originalMessage))) {
-                lineIndex = i;
-                targetLine = line;
-                break;
+        if (searchResult == null) {
+            if (scheduleLineLocateRetry(messageId, originalMessage)) {
+                return;
             }
+            LOGGER.error("Could not find chat line to update for messageId: {} after {} retries", messageId, MAX_LINE_LOCATE_RETRIES);
+            lineLocateRetryCounts.remove(messageId);
+            MessageUtils.removeTrackedMessage(messageId);
+            return;
         }
+        lineLocateRetryCounts.remove(messageId);
+        int lineIndex = searchResult.lineIndex();
+        ChatHudLine targetLine = searchResult.line();
 
-        if (targetLine == null) {
-            LOGGER.error("Could not find chat line to update for messageId: {}", messageId);
+        updateExecutorServiceIfNeeded();
+
+        ChatTranslateConfig.ChatOutputTranslateConfig chatOutputConfig = Translate_AllinOne.getConfig().chatTranslate.output;
+        ApiProviderProfile providerProfile = ProviderRouteResolver.resolve(
+                Translate_AllinOne.getConfig(),
+                ProviderRouteResolver.Route.CHAT_OUTPUT
+        );
+        if (providerProfile == null) {
+            LOGGER.warn("No routed model selected for chat output translation; skipping messageId={}", messageId);
+            Text errorText = Text.literal("Chat Output Translation Error: No routed model selected").formatted(Formatting.RED);
+            MinecraftClient.getInstance().inGameHud.getChatHud().addMessage(errorText);
+            lineLocateRetryCounts.remove(messageId);
             MessageUtils.removeTrackedMessage(messageId);
             return;
         }
 
-        updateExecutorServiceIfNeeded();
-
-        ModConfig modConfig = AutoConfig.getConfigHolder(ModConfig.class).getConfig();
-        boolean isAutoTranslate = modConfig.chatTranslate.output.auto_translate;
-        boolean isStreaming = modConfig.chatTranslate.output.streaming_response;
+        boolean isAutoTranslate = chatOutputConfig.auto_translate;
+        boolean isStreaming = chatOutputConfig.streaming_response;
         Text placeholderText;
 
         if (isStreaming) {
@@ -122,21 +136,21 @@ public class ChatOutputTranslateManager {
 
         final int finalLineIndex = lineIndex;
         translationExecutor.submit(() -> {
+            String requestContext = "route=chat_output,messageId=" + messageId;
             try {
-                ChatTranslateConfig.ChatOutputTranslateConfig chatOutPutConfig = modConfig.chatTranslate.output;
-
-                ProviderSettings settings = ProviderSettings.fromChatOutputConfig(chatOutPutConfig);
+                ProviderSettings settings = ProviderSettings.fromProviderProfile(providerProfile);
                 LLM llm = new LLM(settings);
 
                 StylePreserver.ExtractionResult extraction = StylePreserver.extractAndMarkWithTags(originalMessage);
                 String textToTranslate = extraction.markedText;
                 Map<Integer, Style> styleMap = extraction.styleMap;
 
-                List<OpenAIRequest.Message> apiMessages = getMessages(chatOutPutConfig, textToTranslate);
+                List<OpenAIRequest.Message> apiMessages = getMessages(providerProfile, chatOutputConfig.target_language, textToTranslate);
+                requestContext = buildRequestContext(providerProfile, chatOutputConfig.target_language, textToTranslate, apiMessages, chatOutputConfig.streaming_response, messageId);
 
                 LOGGER.info("Starting translation for message ID: {}. Marked text: {}", messageId, textToTranslate);
 
-                if (chatOutPutConfig.streaming_response) {
+                if (chatOutputConfig.streaming_response) {
                     final StringBuilder rawResponseBuffer = new StringBuilder();
                     final StringBuilder visibleContentBuffer = new StringBuilder();
                     final AtomicBoolean inThinkTag = new AtomicBoolean(false);
@@ -190,7 +204,7 @@ public class ChatOutputTranslateManager {
                     updateChatLineWithFinalText(messageId, finalStyledText);
                 }
             } catch (Exception e) {
-                LOGGER.error("[Translate-Thread] Exception for message ID: {}", messageId, e);
+                LOGGER.error("[Translate-Thread] Exception for message ID: {}. context={}", messageId, requestContext, e);
                 Text errorText = Text.literal("Translation Error: " + e.getMessage()).formatted(Formatting.RED);
                 updateChatLineWithFinalText(messageId, errorText);
             }
@@ -222,6 +236,7 @@ public class ChatOutputTranslateManager {
     }
 
     private static void updateChatLineWithFinalText(UUID messageId, Text finalContent) {
+        lineLocateRetryCounts.remove(messageId);
         ChatHudLine lineToUpdate = activeTranslationLines.remove(messageId);
         if (lineToUpdate == null) return;
 
@@ -245,20 +260,120 @@ public class ChatOutputTranslateManager {
         });
     }
 
-    @NotNull
-    private static List<OpenAIRequest.Message> getMessages(ChatTranslateConfig.ChatOutputTranslateConfig chatOutputTranslateConfig, String textToTranslate) {
-        String suffix;
-
-        if (chatOutputTranslateConfig.llm_provider == Provider.OPENAI) {
-            suffix = chatOutputTranslateConfig.openapi.system_prompt_suffix;
-        } else {
-            suffix = chatOutputTranslateConfig.ollama.system_prompt_suffix;
+    private static LineSearchResult findTargetLine(List<ChatHudLine> messages, Text originalMessage) {
+        for (int i = 0; i < messages.size(); i++) {
+            ChatHudLine line = messages.get(i);
+            if (matchesTargetTextReference(line.content(), originalMessage)) {
+                return new LineSearchResult(i, line);
+            }
         }
 
-        String systemPrompt = "You are a chat translation assistant, translating text into " + chatOutputTranslateConfig.target_language + ". You will receive text with style tags, such as `s0>text</s0>`. Please keep these tags wrapping the translated text paragraphs. For example, `<s0>Hello</s0> world` translated into French is `<s0>Bonjour</s0> le monde`. Only output the translation result, keeping all formatting characters, and keeping all words that are uncertain to translate." + suffix;
-        return List.of(
-                new OpenAIRequest.Message("system", systemPrompt),
-                new OpenAIRequest.Message("user", textToTranslate)
+        for (int i = 0; i < messages.size(); i++) {
+            ChatHudLine line = messages.get(i);
+            if (matchesTargetTextByContent(line.content(), originalMessage)) {
+                return new LineSearchResult(i, line);
+            }
+        }
+        return null;
+    }
+
+    private static boolean matchesTargetTextReference(Text lineContent, Text originalMessage) {
+        if (lineContent.equals(originalMessage)) {
+            return true;
+        }
+        return !lineContent.getSiblings().isEmpty() && lineContent.getSiblings().get(0).equals(originalMessage);
+    }
+
+    private static boolean matchesTargetTextByContent(Text lineContent, Text originalMessage) {
+        String original = originalMessage.getString();
+        if (lineContent.getString().equals(original)) {
+            return true;
+        }
+        return !lineContent.getSiblings().isEmpty() && lineContent.getSiblings().get(0).getString().equals(original);
+    }
+
+    private static boolean scheduleLineLocateRetry(UUID messageId, Text originalMessage) {
+        int attempt = lineLocateRetryCounts.merge(messageId, 1, Integer::sum);
+        if (attempt > MAX_LINE_LOCATE_RETRIES) {
+            return false;
+        }
+
+        CompletableFuture.delayedExecutor(LINE_LOCATE_RETRY_DELAY_MS, TimeUnit.MILLISECONDS).execute(() -> {
+            MinecraftClient client = MinecraftClient.getInstance();
+            if (client == null) {
+                return;
+            }
+            client.execute(() -> translate(messageId, originalMessage));
+        });
+        return true;
+    }
+
+    private record LineSearchResult(int lineIndex, ChatHudLine line) {
+    }
+
+    @NotNull
+    private static List<OpenAIRequest.Message> getMessages(ApiProviderProfile providerProfile, String targetLanguage, String textToTranslate) {
+        String systemPrompt = PromptMessageBuilder.appendSystemPromptSuffix(
+                "You are a deterministic translation engine.\n"
+                        + "Target language: " + targetLanguage + ".\n"
+                        + "\n"
+                        + "Rules (highest priority first):\n"
+                        + "1) Output only the final translated text. No explanation, markdown, or quotes.\n"
+                        + "2) Preserve style tags exactly: <s0>...</s0>, <s1>...</s1>, ... Keep the same tag ids, counts, and order.\n"
+                        + "3) Preserve tokens exactly: § color/style codes, placeholders (%s %d %f {d1}), URLs, numbers, <...>, {...}, \\n, \\t.\n"
+                        + "4) If a term is uncertain, keep only that term unchanged and still translate surrounding text.\n"
+                        + "5) If any rule cannot be guaranteed, return the original input unchanged.",
+                providerProfile.activeSystemPromptSuffix()
+        );
+        return PromptMessageBuilder.buildMessages(
+                systemPrompt,
+                textToTranslate,
+                providerProfile.activeSupportsSystemMessage(),
+                providerProfile.model_id,
+                providerProfile.activeInjectSystemPromptIntoUserMessage()
         );
     }
-} 
+
+    private static String buildRequestContext(
+            ApiProviderProfile profile,
+            String targetLanguage,
+            String markedText,
+            List<OpenAIRequest.Message> messages,
+            boolean streaming,
+            UUID messageId
+    ) {
+        String providerId = profile == null ? "" : profile.id;
+        String modelId = profile == null ? "" : profile.model_id;
+        int messageCount = messages == null ? 0 : messages.size();
+        String roles = messages == null
+                ? "[]"
+                : messages.stream().map(message -> message == null ? "null" : String.valueOf(message.role)).collect(java.util.stream.Collectors.joining(",", "[", "]"));
+        String sample = truncate(normalizeWhitespace(markedText), 160);
+        return "route=chat_output"
+                + ", messageId=" + messageId
+                + ", provider=" + providerId
+                + ", model=" + modelId
+                + ", target=" + (targetLanguage == null ? "" : targetLanguage)
+                + ", streaming=" + streaming
+                + ", messages=" + messageCount
+                + ", roles=" + roles
+                + ", sample=\"" + sample + "\"";
+    }
+
+    private static String normalizeWhitespace(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').trim();
+    }
+
+    private static String truncate(String value, int maxLength) {
+        if (value == null) {
+            return "";
+        }
+        if (value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, Math.max(0, maxLength - 3)) + "...";
+    }
+}

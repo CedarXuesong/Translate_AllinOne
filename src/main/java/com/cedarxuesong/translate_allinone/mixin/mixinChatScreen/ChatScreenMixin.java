@@ -1,5 +1,6 @@
 package com.cedarxuesong.translate_allinone.mixin.mixinChatScreen;
 
+import com.cedarxuesong.translate_allinone.Translate_AllinOne;
 import com.cedarxuesong.translate_allinone.utils.input.KeybindingManager;
 import com.cedarxuesong.translate_allinone.utils.translate.ChatInputTranslateManager;
 import net.minecraft.client.input.KeyInput;
@@ -18,7 +19,7 @@ public class ChatScreenMixin {
 
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
     private void onKeyPressed(KeyInput keyInput, CallbackInfoReturnable<Boolean> cir) {
-        if (KeybindingManager.chatInputTranslateKey.matchesKey(keyInput)) {
+        if (KeybindingManager.matchesKeyInput(Translate_AllinOne.getConfig().chatTranslate.input.keybinding, keyInput)) {
             ChatInputTranslateManager.translate(this.chatField);
             cir.setReturnValue(true);
         }

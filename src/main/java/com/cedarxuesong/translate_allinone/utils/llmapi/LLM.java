@@ -1,11 +1,13 @@
 package com.cedarxuesong.translate_allinone.utils.llmapi;
 
 import com.cedarxuesong.translate_allinone.Translate_AllinOne;
+import com.cedarxuesong.translate_allinone.utils.config.pojos.ApiProviderType;
 import com.cedarxuesong.translate_allinone.utils.llmapi.ollama.OllamaChatRequest;
 import com.cedarxuesong.translate_allinone.utils.llmapi.ollama.OllamaClient;
 import com.cedarxuesong.translate_allinone.utils.llmapi.openai.OpenAIChatCompletion;
 import com.cedarxuesong.translate_allinone.utils.llmapi.openai.OpenAIClient;
 import com.cedarxuesong.translate_allinone.utils.llmapi.openai.OpenAIRequest;
+import com.cedarxuesong.translate_allinone.utils.llmapi.openai.OpenAIResponsesRequest;
 
 import java.util.List;
 import java.util.Locale;
@@ -42,23 +44,44 @@ public class LLM {
     public CompletableFuture<String> getCompletion(List<OpenAIRequest.Message> messages) {
         if (openAIClient != null) {
             boolean structuredOutputEnabled = settings.openAISettings().enableStructuredOutputIfAvailable();
-            CompletionSupplier primary = () -> openAIClient.getChatCompletion(
+
+            if (useResponsesApi()) {
+                CompletionSupplier primaryCall = () -> openAIClient.getResponsesCompletion(
+                        buildOpenAIResponsesRequest(messages, false, structuredOutputEnabled)
+                );
+                CompletionSupplier fallbackCall = () -> openAIClient.getResponsesCompletion(
+                        buildOpenAIResponsesRequest(messages, false, false)
+                );
+                CompletionSupplier primary = () -> withInternalPostprocessRetry(primaryCall, "OpenAI Responses");
+                CompletionSupplier fallback = () -> withInternalPostprocessRetry(fallbackCall, "OpenAI Responses");
+                return withStructuredOutputFallback(structuredOutputEnabled, primary, fallback, "OpenAI Responses");
+            }
+
+            CompletionSupplier primaryCall = () -> openAIClient.getChatCompletion(
                     buildOpenAIRequest(messages, false, structuredOutputEnabled)
             ).thenApply(response -> response.choices.get(0).message.content);
-            CompletionSupplier fallback = () -> openAIClient.getChatCompletion(
+            CompletionSupplier fallbackCall = () -> openAIClient.getChatCompletion(
                     buildOpenAIRequest(messages, false, false)
             ).thenApply(response -> response.choices.get(0).message.content);
+            CompletionSupplier primary = () -> withInternalPostprocessRetry(primaryCall, "OpenAI");
+            CompletionSupplier fallback = () -> withInternalPostprocessRetry(fallbackCall, "OpenAI");
             return withStructuredOutputFallback(structuredOutputEnabled, primary, fallback, "OpenAI");
-        } else { // ollamaClient != null
+        }
+
+        if (ollamaClient != null) {
             boolean structuredOutputEnabled = settings.ollamaSettings().enableStructuredOutputIfAvailable();
-            CompletionSupplier primary = () -> ollamaClient.getChatCompletion(
+            CompletionSupplier primaryCall = () -> ollamaClient.getChatCompletion(
                     buildOllamaRequest(messages, false, structuredOutputEnabled)
             ).thenApply(response -> response.message.content);
-            CompletionSupplier fallback = () -> ollamaClient.getChatCompletion(
+            CompletionSupplier fallbackCall = () -> ollamaClient.getChatCompletion(
                     buildOllamaRequest(messages, false, false)
             ).thenApply(response -> response.message.content);
+            CompletionSupplier primary = () -> withInternalPostprocessRetry(primaryCall, "Ollama");
+            CompletionSupplier fallback = () -> withInternalPostprocessRetry(fallbackCall, "Ollama");
             return withStructuredOutputFallback(structuredOutputEnabled, primary, fallback, "Ollama");
         }
+
+        return CompletableFuture.failedFuture(new IllegalStateException("当前供应商不支持聊天消息补全接口。"));
     }
 
     /**
@@ -73,6 +96,24 @@ public class LLM {
     public Stream<String> getStreamingCompletion(List<OpenAIRequest.Message> messages) {
         if (openAIClient != null) {
             boolean structuredOutputEnabled = settings.openAISettings().enableStructuredOutputIfAvailable();
+
+            if (useResponsesApi()) {
+                try {
+                    return openAIClient.getStreamingResponsesCompletion(
+                            buildOpenAIResponsesRequest(messages, true, structuredOutputEnabled)
+                    );
+                } catch (RuntimeException e) {
+                    Throwable rootCause = unwrapCompletionThrowable(e);
+                    if (structuredOutputEnabled && isStructuredOutputUnsupported(rootCause)) {
+                        Translate_AllinOne.LOGGER.warn("OpenAI Responses structured output unsupported in streaming mode, retrying without it: {}", rootCause.getMessage());
+                        return openAIClient.getStreamingResponsesCompletion(
+                                buildOpenAIResponsesRequest(messages, true, false)
+                        );
+                    }
+                    throw e;
+                }
+            }
+
             try {
                 return openAIClient.getStreamingChatCompletion(
                                 buildOpenAIRequest(messages, true, structuredOutputEnabled)
@@ -89,7 +130,9 @@ public class LLM {
                 }
                 throw e;
             }
-        } else { // ollamaClient != null
+        }
+
+        if (ollamaClient != null) {
             boolean structuredOutputEnabled = settings.ollamaSettings().enableStructuredOutputIfAvailable();
             try {
                 return ollamaClient.getStreamingChatCompletion(
@@ -108,6 +151,12 @@ public class LLM {
                 throw e;
             }
         }
+
+        throw new IllegalStateException("当前供应商不支持流式聊天补全接口。");
+    }
+
+    public boolean supportsChatCompletion() {
+        return openAIClient != null || ollamaClient != null;
     }
 
     private OpenAIRequest buildOpenAIRequest(List<OpenAIRequest.Message> messages, boolean stream, boolean structuredOutputEnabled) {
@@ -120,6 +169,23 @@ public class LLM {
                 settings.openAISettings().temperature(),
                 stream,
                 responseFormat
+        );
+    }
+
+    private OpenAIResponsesRequest buildOpenAIResponsesRequest(
+            List<OpenAIRequest.Message> messages,
+            boolean stream,
+            boolean structuredOutputEnabled
+    ) {
+        OpenAIResponsesRequest.TextConfig textConfig = structuredOutputEnabled
+                ? new OpenAIResponsesRequest.TextConfig(new OpenAIResponsesRequest.Format("json_object"))
+                : null;
+        return OpenAIResponsesRequest.fromChatMessages(
+                settings.openAISettings().modelId(),
+                messages,
+                settings.openAISettings().temperature(),
+                stream,
+                textConfig
         );
     }
 
@@ -192,12 +258,67 @@ public class LLM {
             return true;
         }
 
+        if (message.contains("text.format") || message.contains("text format")) {
+            return true;
+        }
+
         if (message.contains("unknown field") && message.contains("format")) {
             return true;
         }
 
         return (message.contains("format") || message.contains("structured"))
                 && (message.contains("unsupported") || message.contains("not support") || message.contains("invalid"));
+    }
+
+    private boolean useResponsesApi() {
+        return settings.openAISettings().providerType() == ApiProviderType.OPENAI_RESPONSE;
+    }
+
+    private CompletableFuture<String> withInternalPostprocessRetry(CompletionSupplier supplier, String providerName) {
+        CompletableFuture<String> firstAttempt;
+        try {
+            firstAttempt = supplier.get();
+        } catch (Throwable e) {
+            return CompletableFuture.failedFuture(unwrapCompletionThrowable(e));
+        }
+
+        CompletableFuture<String> result = new CompletableFuture<>();
+        firstAttempt.whenComplete((value, throwable) -> {
+            if (throwable == null) {
+                result.complete(value);
+                return;
+            }
+
+            Throwable rootCause = unwrapCompletionThrowable(throwable);
+            if (!isInternalPostprocessError(rootCause)) {
+                result.completeExceptionally(rootCause);
+                return;
+            }
+
+            Translate_AllinOne.LOGGER.warn("{} request failed with internal postprocess error, retrying once: {}", providerName, rootCause.getMessage());
+            try {
+                supplier.get().whenComplete((retryValue, retryThrowable) -> {
+                    if (retryThrowable == null) {
+                        result.complete(retryValue);
+                    } else {
+                        result.completeExceptionally(unwrapCompletionThrowable(retryThrowable));
+                    }
+                });
+            } catch (Throwable retryStartError) {
+                result.completeExceptionally(unwrapCompletionThrowable(retryStartError));
+            }
+        });
+        return result;
+    }
+
+    private boolean isInternalPostprocessError(Throwable throwable) {
+        if (!(throwable instanceof LLMApiException) || throwable.getMessage() == null) {
+            return false;
+        }
+        String message = throwable.getMessage().toLowerCase(Locale.ROOT);
+        return message.contains("internalpostprocesserror")
+                || message.contains("internal error during model post-process")
+                || message.contains("translation failed due to internal error");
     }
 
     @FunctionalInterface

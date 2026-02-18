@@ -8,7 +8,6 @@
   "client": [
     "mixinChatHud.ChatHudAccessor",
     "mixinChatHud.ChatHudMixin",
-    "mixinItem.KeyBindingAccessor",
     "mixinItem.DrawContextItemTooltipMixin",
     "mixinInGameGui.InGameHudMixin",
     "mixinInGameGui.InGameHudAccessor",

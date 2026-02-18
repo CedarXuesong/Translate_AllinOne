@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.ArrayList;
 
@@ -37,7 +38,7 @@ public class ItemTemplateCache {
     private final Path cacheFilePath;
     private final Map<String, String> templateCache = new ConcurrentHashMap<>();
     private final Set<String> inProgress = ConcurrentHashMap.newKeySet();
-    private final LinkedBlockingQueue<String> pendingQueue = new LinkedBlockingQueue<>();
+    private final LinkedBlockingDeque<String> pendingQueue = new LinkedBlockingDeque<>();
     private final LinkedBlockingQueue<List<String>> batchWorkQueue = new LinkedBlockingQueue<>();
     private final Set<String> allQueuedOrInProgressKeys = ConcurrentHashMap.newKeySet();
     private final Map<String, String> errorCache = new ConcurrentHashMap<>();
@@ -121,7 +122,7 @@ public class ItemTemplateCache {
         // Atomically check and add.
         // If the key was not already in the set, add it to the pending queue.
         if (allQueuedOrInProgressKeys.add(originalTemplate)) {
-        pendingQueue.offer(originalTemplate);
+            pendingQueue.offerLast(originalTemplate);
         }
         return "";
     }
@@ -194,7 +195,7 @@ public class ItemTemplateCache {
 
     public synchronized void requeueFromError(String key) {
         if (errorCache.remove(key) != null) {
-            pendingQueue.offer(key);
+            pendingQueue.offerFirst(key);
         }
     }
 

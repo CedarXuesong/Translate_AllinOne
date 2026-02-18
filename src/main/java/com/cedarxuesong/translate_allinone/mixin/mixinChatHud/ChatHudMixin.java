@@ -5,7 +5,6 @@ import com.cedarxuesong.translate_allinone.registration.LifecycleEventManager;
 import com.cedarxuesong.translate_allinone.utils.AnimationManager;
 import com.cedarxuesong.translate_allinone.utils.MessageUtils;
 import com.cedarxuesong.translate_allinone.utils.config.ModConfig;
-import me.shedaniel.autoconfig.AutoConfig;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.hud.ChatHud;
 import net.minecraft.text.ClickEvent;
@@ -19,9 +18,14 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 @Mixin(ChatHud.class)
 public abstract class ChatHudMixin {
+    @Unique
+    private static final long AUTO_TRANSLATE_COMMAND_DELAY_MS = 25L;
+
     @Unique
     private static final ThreadLocal<Boolean> isModifyingMessage = ThreadLocal.withInitial(() -> false);
 
@@ -34,7 +38,7 @@ public abstract class ChatHudMixin {
         try {
             isModifyingMessage.set(true);
 
-        ModConfig config = AutoConfig.getConfigHolder(ModConfig.class).getConfig();
+        ModConfig config = Translate_AllinOne.getConfig();
         if (config.chatTranslate.output.enabled) {
                 String plainText = AnimationManager.stripFormatting(message.getString()).trim();
                 if (plainText.isEmpty()) {
@@ -45,12 +49,7 @@ public abstract class ChatHudMixin {
             MessageUtils.putTrackedMessage(messageId, message);
 
                 if (config.chatTranslate.output.auto_translate) {
-                    MinecraftClient.getInstance().execute(() -> {
-                        if (MinecraftClient.getInstance().player != null
-                                && MinecraftClient.getInstance().player.networkHandler != null) {
-                            MinecraftClient.getInstance().player.networkHandler.sendChatCommand("translate_allinone translatechatline " + messageId);
-                        }
-                    });
+                    queueAutoTranslateCommand(messageId);
                     return message;
                 } else {
             MutableText translateButton = Text.literal(" [T]");
@@ -67,4 +66,19 @@ public abstract class ChatHudMixin {
             isModifyingMessage.set(false);
         }
     }
-} 
+
+    @Unique
+    private static void queueAutoTranslateCommand(UUID messageId) {
+        CompletableFuture.delayedExecutor(AUTO_TRANSLATE_COMMAND_DELAY_MS, TimeUnit.MILLISECONDS).execute(() -> {
+            MinecraftClient client = MinecraftClient.getInstance();
+            if (client == null) {
+                return;
+            }
+            client.execute(() -> {
+                if (client.player != null && client.player.networkHandler != null) {
+                    client.player.networkHandler.sendChatCommand("translate_allinone translatechatline " + messageId);
+                }
+            });
+        });
+    }
+}
