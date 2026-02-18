@@ -15,9 +15,10 @@ public final class ConfigUiModalSupport {
             boolean addProviderModalOpen,
             boolean modelSettingsModalOpen,
             boolean customParametersModalOpen,
-            boolean resetConfirmModalOpen
+            boolean resetConfirmModalOpen,
+            boolean updateNoticeModalOpen
     ) {
-        return addProviderModalOpen || modelSettingsModalOpen || customParametersModalOpen || resetConfirmModalOpen;
+        return addProviderModalOpen || modelSettingsModalOpen || customParametersModalOpen || resetConfirmModalOpen || updateNoticeModalOpen;
     }
 
     public static boolean isInsideOpenModal(
@@ -28,8 +29,12 @@ public final class ConfigUiModalSupport {
             boolean addProviderModalOpen,
             boolean modelSettingsModalOpen,
             boolean customParametersModalOpen,
-            boolean resetConfirmModalOpen
+            boolean resetConfirmModalOpen,
+            boolean updateNoticeModalOpen
     ) {
+        if (updateNoticeModalOpen && updateNoticeModalRect(screenWidth, screenHeight).contains(x, y)) {
+            return true;
+        }
         if (resetConfirmModalOpen && resetConfirmModalRect(screenWidth, screenHeight).contains(x, y)) {
             return true;
         }
@@ -69,6 +74,14 @@ public final class ConfigUiModalSupport {
     public static UiRect resetConfirmModalRect(int screenWidth, int screenHeight) {
         int width = 420;
         int height = 170;
+        int x = (screenWidth - width) / 2;
+        int y = (screenHeight - height) / 2;
+        return new UiRect(x, y, width, height);
+    }
+
+    public static UiRect updateNoticeModalRect(int screenWidth, int screenHeight) {
+        int width = 460;
+        int height = 190;
         int x = (screenWidth - width) / 2;
         int y = (screenHeight - height) / 2;
         return new UiRect(x, y, width, height);

@@ -8,8 +8,12 @@ public final class ConfigUiModalInteractionSupport {
             boolean addProviderModalOpen,
             boolean modelSettingsModalOpen,
             boolean customParametersModalOpen,
-            boolean resetConfirmModalOpen
+            boolean resetConfirmModalOpen,
+            boolean updateNoticeModalOpen
     ) {
+        if (updateNoticeModalOpen) {
+            return ModalCloseAction.CLOSE_UPDATE_NOTICE;
+        }
         if (resetConfirmModalOpen) {
             return ModalCloseAction.CLOSE_RESET_CONFIRM;
         }
@@ -29,8 +33,12 @@ public final class ConfigUiModalInteractionSupport {
             boolean addProviderModalOpen,
             boolean modelSettingsModalOpen,
             boolean customParametersModalOpen,
-            boolean resetConfirmModalOpen
+            boolean resetConfirmModalOpen,
+            boolean updateNoticeModalOpen
     ) {
+        if (updateNoticeModalOpen) {
+            return ModalCloseAction.CLOSE_UPDATE_NOTICE;
+        }
         if (resetConfirmModalOpen) {
             return ModalCloseAction.CLOSE_RESET_CONFIRM;
         }
@@ -48,6 +56,7 @@ public final class ConfigUiModalInteractionSupport {
 
     public enum ModalCloseAction {
         NONE,
+        CLOSE_UPDATE_NOTICE,
         CLOSE_RESET_CONFIRM,
         CLOSE_ADD_PROVIDER,
         CLOSE_MODEL_SETTINGS,

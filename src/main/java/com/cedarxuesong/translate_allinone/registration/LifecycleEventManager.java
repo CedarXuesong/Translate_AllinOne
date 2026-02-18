@@ -5,6 +5,7 @@ import com.cedarxuesong.translate_allinone.utils.cache.ScoreboardTextCache;
 import com.cedarxuesong.translate_allinone.utils.cache.ItemTemplateCache;
 import com.cedarxuesong.translate_allinone.utils.translate.ItemTranslateManager;
 import com.cedarxuesong.translate_allinone.utils.translate.ScoreboardTranslateManager;
+import com.cedarxuesong.translate_allinone.utils.update.UpdateCheckManager;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import org.slf4j.Logger;
@@ -53,6 +54,10 @@ public class LifecycleEventManager {
                     isReadyForTranslation = true;
                     LOGGER.info("Grace period over. Translations are now active.");
                 }
+            }
+
+            if (isReadyForTranslation) {
+                UpdateCheckManager.tryNotifyInChat(client);
             }
         });
 

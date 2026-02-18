@@ -45,6 +45,7 @@ import com.cedarxuesong.translate_allinone.utils.config.pojos.ItemTranslateConfi
 import com.cedarxuesong.translate_allinone.utils.config.pojos.ProviderManagerConfig;
 import com.cedarxuesong.translate_allinone.utils.config.pojos.ScoreboardConfig;
 import com.cedarxuesong.translate_allinone.utils.input.KeybindingManager;
+import com.cedarxuesong.translate_allinone.utils.update.UpdateCheckManager;
 import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
@@ -281,6 +282,8 @@ public class ModConfigScreen extends Screen {
     private List<CustomParameterEntry> customParametersBackup = new ArrayList<>();
     private boolean customParametersModalOpen;
     private boolean resetConfirmModalOpen;
+    private boolean updateNoticeModalOpen;
+    private boolean updateNoticeAutoPrompted;
     private String selectedCustomParameterPath = "";
     private TextFieldWidget customParameterNameField;
     private TextFieldWidget customParameterValueField;
@@ -322,7 +325,19 @@ public class ModConfigScreen extends Screen {
 
     @Override
     protected void init() {
+        if (!updateNoticeAutoPrompted && UpdateCheckManager.shouldShowConfigNotice()) {
+            openUpdateNoticeModal();
+        }
         rebuildActionBlocks();
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (!updateNoticeAutoPrompted && UpdateCheckManager.shouldShowConfigNotice()) {
+            openUpdateNoticeModal();
+            rebuildActionBlocks();
+        }
     }
 
     private void rebuildActionBlocks() {
@@ -388,7 +403,9 @@ public class ModConfigScreen extends Screen {
         );
 
         addSectionSpecificActions();
-        if (resetConfirmModalOpen) {
+        if (updateNoticeModalOpen) {
+            addUpdateNoticeModal();
+        } else if (resetConfirmModalOpen) {
             addResetConfirmModal();
         }
         ConfigUiFocusSupport.applyPendingFocus(
@@ -755,7 +772,13 @@ public class ModConfigScreen extends Screen {
                 changed,
                 editable,
                 floating,
-                ConfigUiModalSupport.isAnyModalOpen(addProviderModalOpen, modelSettingsModalOpen, customParametersModalOpen, resetConfirmModalOpen)
+                ConfigUiModalSupport.isAnyModalOpen(
+                        addProviderModalOpen,
+                        modelSettingsModalOpen,
+                        customParametersModalOpen,
+                        resetConfirmModalOpen,
+                        updateNoticeModalOpen
+                )
         );
     }
 
@@ -1250,6 +1273,17 @@ public class ModConfigScreen extends Screen {
         rebuildActionBlocks();
     }
 
+    private void openUpdateNoticeModal() {
+        updateNoticeAutoPrompted = true;
+        updateNoticeModalOpen = true;
+        routeDropdownSlot = null;
+        addProviderTypeDropdownOpen = false;
+    }
+
+    private void closeUpdateNoticeModal() {
+        updateNoticeModalOpen = false;
+    }
+
     private void closeResetConfirmModal() {
         resetConfirmModalOpen = false;
     }
@@ -1293,12 +1327,71 @@ public class ModConfigScreen extends Screen {
         );
     }
 
+    private void addUpdateNoticeModal() {
+        UiRect modalRect = ConfigUiModalSupport.updateNoticeModalRect(this.width, this.height);
+        int buttonWidth = 108;
+        int buttonHeight = 20;
+        int buttonGap = 10;
+        int buttonY = modalRect.bottom() - 30;
+        int openX = modalRect.right() - 16 - buttonWidth;
+        int cancelX = openX - buttonGap - buttonWidth;
+
+        floatingActionBlockRegistry.add(
+                cancelX,
+                buttonY,
+                buttonWidth,
+                buttonHeight,
+                t("button.cancel"),
+                () -> {
+                    closeUpdateNoticeModal();
+                    rebuildActionBlocks();
+                },
+                COLOR_BLOCK,
+                COLOR_BLOCK_HOVER,
+                COLOR_TEXT,
+                true
+        );
+
+        floatingActionBlockRegistry.add(
+                openX,
+                buttonY,
+                buttonWidth,
+                buttonHeight,
+                t("button.open_release"),
+                () -> {
+                    UpdateCheckManager.openLatestReleasePage();
+                    closeUpdateNoticeModal();
+                    rebuildActionBlocks();
+                },
+                COLOR_BLOCK_ACCENT,
+                COLOR_BLOCK_ACCENT_HOVER,
+                COLOR_TEXT,
+                true
+        );
+    }
+
     private void renderResetConfirmModalMessage(DrawContext context) {
         UiRect modalRect = ConfigUiModalSupport.resetConfirmModalRect(this.width, this.height);
         int textX = modalRect.x + 16;
         int textY = modalRect.y + 48;
         int maxWidth = Math.max(10, modalRect.width - 32);
         List<OrderedText> lines = this.textRenderer.wrapLines(t("modal.reset_confirm.message"), maxWidth);
+        int lineY = textY;
+        for (OrderedText line : lines) {
+            context.drawText(this.textRenderer, line, textX, lineY, COLOR_TEXT_MUTED, false);
+            lineY += this.textRenderer.fontHeight + 2;
+        }
+    }
+
+    private void renderUpdateNoticeModalMessage(DrawContext context) {
+        UiRect modalRect = ConfigUiModalSupport.updateNoticeModalRect(this.width, this.height);
+        int textX = modalRect.x + 16;
+        int textY = modalRect.y + 48;
+        int maxWidth = Math.max(10, modalRect.width - 32);
+        List<OrderedText> lines = this.textRenderer.wrapLines(
+                t("modal.update_notice.message", UpdateCheckManager.latestVersion(), UpdateCheckManager.currentVersion()),
+                maxWidth
+        );
         int lineY = textY;
         for (OrderedText line : lines) {
             context.drawText(this.textRenderer, line, textX, lineY, COLOR_TEXT_MUTED, false);
@@ -1331,10 +1424,16 @@ public class ModConfigScreen extends Screen {
                 addProviderModalOpen,
                 modelSettingsModalOpen,
                 customParametersModalOpen,
-                resetConfirmModalOpen
+                resetConfirmModalOpen,
+                updateNoticeModalOpen
         );
 
         switch (action) {
+            case CLOSE_UPDATE_NOTICE -> {
+                closeUpdateNoticeModal();
+                rebuildActionBlocks();
+                return;
+            }
             case CLOSE_RESET_CONFIRM -> {
                 closeResetConfirmModal();
                 rebuildActionBlocks();
@@ -1387,7 +1486,13 @@ public class ModConfigScreen extends Screen {
 
         double mouseX = click.x();
         double mouseY = click.y();
-        boolean modalOpen = ConfigUiModalSupport.isAnyModalOpen(addProviderModalOpen, modelSettingsModalOpen, customParametersModalOpen, resetConfirmModalOpen);
+        boolean modalOpen = ConfigUiModalSupport.isAnyModalOpen(
+                addProviderModalOpen,
+                modelSettingsModalOpen,
+                customParametersModalOpen,
+                resetConfirmModalOpen,
+                updateNoticeModalOpen
+        );
 
         if (modalOpen) {
             draggingSlider = null;
@@ -1399,15 +1504,22 @@ public class ModConfigScreen extends Screen {
                     addProviderModalOpen,
                     modelSettingsModalOpen,
                     customParametersModalOpen,
-                    resetConfirmModalOpen
+                    resetConfirmModalOpen,
+                    updateNoticeModalOpen
             )) {
                 ConfigUiModalInteractionSupport.ModalCloseAction action = ConfigUiModalInteractionSupport.outsideModalClickAction(
                         addProviderModalOpen,
                         modelSettingsModalOpen,
                         customParametersModalOpen,
-                        resetConfirmModalOpen
+                        resetConfirmModalOpen,
+                        updateNoticeModalOpen
                 );
                 switch (action) {
+                    case CLOSE_UPDATE_NOTICE -> {
+                        closeUpdateNoticeModal();
+                        rebuildActionBlocks();
+                        return true;
+                    }
                     case CLOSE_RESET_CONFIRM -> {
                         closeResetConfirmModal();
                         rebuildActionBlocks();
@@ -1580,7 +1692,13 @@ public class ModConfigScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        if (ConfigUiModalSupport.isAnyModalOpen(addProviderModalOpen, modelSettingsModalOpen, customParametersModalOpen, resetConfirmModalOpen)) {
+        if (ConfigUiModalSupport.isAnyModalOpen(
+                addProviderModalOpen,
+                modelSettingsModalOpen,
+                customParametersModalOpen,
+                resetConfirmModalOpen,
+                updateNoticeModalOpen
+        )) {
             return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
         }
 
@@ -1628,7 +1746,13 @@ public class ModConfigScreen extends Screen {
         updateControlAnimations();
 
         long nowMillis = System.currentTimeMillis();
-        boolean modalOpen = ConfigUiModalSupport.isAnyModalOpen(addProviderModalOpen, modelSettingsModalOpen, customParametersModalOpen, resetConfirmModalOpen);
+        boolean modalOpen = ConfigUiModalSupport.isAnyModalOpen(
+                addProviderModalOpen,
+                modelSettingsModalOpen,
+                customParametersModalOpen,
+                resetConfirmModalOpen,
+                updateNoticeModalOpen
+        );
         ConfigUiScreenRenderSupport.renderChrome(
                 context,
                 this.textRenderer,
@@ -1672,14 +1796,18 @@ public class ModConfigScreen extends Screen {
                 modelSettingsModalOpen,
                 customParametersModalOpen,
                 resetConfirmModalOpen,
+                updateNoticeModalOpen,
                 t("modal.add_provider.title"),
                 t("modal.model.title"),
                 t("custom_params.title"),
                 t("modal.reset_confirm.title"),
+                t("modal.update_notice.title"),
                 SCREEN_RENDER_STYLE
         );
 
-        if (resetConfirmModalOpen) {
+        if (updateNoticeModalOpen) {
+            renderUpdateNoticeModalMessage(context);
+        } else if (resetConfirmModalOpen) {
             renderResetConfirmModalMessage(context);
         }
 

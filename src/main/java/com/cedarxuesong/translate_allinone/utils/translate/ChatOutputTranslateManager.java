@@ -40,6 +40,7 @@ public class ChatOutputTranslateManager {
     private static int currentConcurrentRequests = -1;
     private static final int MAX_LINE_LOCATE_RETRIES = 4;
     private static final long LINE_LOCATE_RETRY_DELAY_MS = 40L;
+    private static final long ROUTE_ERROR_DISPLAY_MS = 3_000L;
 
     private static synchronized void updateExecutorServiceIfNeeded() {
         int configuredConcurrentRequests = Translate_AllinOne.getConfig().chatTranslate.output.max_concurrent_requests;
@@ -91,11 +92,9 @@ public class ChatOutputTranslateManager {
                 ProviderRouteResolver.Route.CHAT_OUTPUT
         );
         if (providerProfile == null) {
-            LOGGER.warn("No routed model selected for chat output translation; skipping messageId={}", messageId);
-            Text errorText = Text.literal("Chat Output Translation Error: No routed model selected").formatted(Formatting.RED);
-            MinecraftClient.getInstance().inGameHud.getChatHud().addMessage(errorText);
+            LOGGER.warn("No routed model selected for chat output translation; showing temporary error for messageId={}", messageId);
+            showTemporaryRouteError(messageId, chatHudAccessor, messages, lineIndex, targetLine);
             lineLocateRetryCounts.remove(messageId);
-            MessageUtils.removeTrackedMessage(messageId);
             return;
         }
 
@@ -258,6 +257,55 @@ public class ChatOutputTranslateManager {
             }
             MessageUtils.removeTrackedMessage(messageId);
         });
+    }
+
+    private static void showTemporaryRouteError(
+            UUID messageId,
+            ChatHudAccessor chatHudAccessor,
+            List<ChatHudLine> messages,
+            int lineIndex,
+            ChatHudLine originalLine
+    ) {
+        int scrolledLines = chatHudAccessor.getScrolledLines();
+        Text errorText = Text.literal("Translation Error: No routed model selected").formatted(Formatting.RED);
+        ChatHudLine errorLine = new ChatHudLine(originalLine.creationTick(), errorText, originalLine.signature(), originalLine.indicator());
+        messages.set(lineIndex, errorLine);
+        chatHudAccessor.invokeRefresh();
+        chatHudAccessor.setScrolledLines(scrolledLines);
+
+        CompletableFuture.delayedExecutor(ROUTE_ERROR_DISPLAY_MS, TimeUnit.MILLISECONDS).execute(() -> {
+            MinecraftClient client = MinecraftClient.getInstance();
+            if (client == null) {
+                return;
+            }
+            client.execute(() -> restoreLineAfterTemporaryError(messageId, errorLine, originalLine));
+        });
+
+        MessageUtils.removeTrackedMessage(messageId);
+    }
+
+    private static void restoreLineAfterTemporaryError(UUID messageId, ChatHudLine errorLine, ChatHudLine originalLine) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null || client.inGameHud == null) {
+            return;
+        }
+
+        ChatHud chatHud = client.inGameHud.getChatHud();
+        if (chatHud == null) {
+            return;
+        }
+
+        ChatHudAccessor chatHudAccessor = (ChatHudAccessor) chatHud;
+        List<ChatHudLine> messages = chatHudAccessor.getMessages();
+        int lineIndex = messages.indexOf(errorLine);
+        if (lineIndex != -1) {
+            int scrolledLines = chatHudAccessor.getScrolledLines();
+            messages.set(lineIndex, originalLine);
+            chatHudAccessor.invokeRefresh();
+            chatHudAccessor.setScrolledLines(scrolledLines);
+        }
+
+        lineLocateRetryCounts.remove(messageId);
     }
 
     private static LineSearchResult findTargetLine(List<ChatHudLine> messages, Text originalMessage) {

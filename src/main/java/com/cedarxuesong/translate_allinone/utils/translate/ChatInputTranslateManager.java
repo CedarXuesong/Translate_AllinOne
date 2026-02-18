@@ -16,8 +16,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -32,6 +34,7 @@ public class ChatInputTranslateManager {
 
     private static final AtomicBoolean isTranslating = new AtomicBoolean(false);
     private static final AtomicReference<String> originalTextRef = new AtomicReference<>("");
+    private static final long ROUTE_ERROR_DISPLAY_MS = 3_000L;
 
     public static void translate(TextFieldWidget chatField) {
         if (!isTranslating.compareAndSet(false, true)) {
@@ -60,7 +63,9 @@ public class ChatInputTranslateManager {
                         ProviderRouteResolver.Route.CHAT_INPUT
                 );
                 if (providerProfile == null) {
-                    throw new IllegalStateException("No routed model selected for chat input translation");
+                    LOGGER.warn("No routed model selected for chat input translation; showing temporary error.");
+                    showTemporaryRouteError(chatField, originalTextRef.get());
+                    return;
                 }
 
                 ProviderSettings settings = ProviderSettings.fromProviderProfile(providerProfile);
@@ -215,5 +220,34 @@ public class ChatInputTranslateManager {
             return value;
         }
         return value.substring(0, Math.max(0, maxLength - 3)) + "...";
+    }
+
+    private static void showTemporaryRouteError(TextFieldWidget chatField, String originalText) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null) {
+            return;
+        }
+
+        final String errorText = "Translation Error: No routed model selected";
+        final String fallbackText = originalText == null ? "" : originalText;
+
+        client.execute(() -> {
+            chatField.setText(errorText);
+            chatField.setCursor(errorText.length(), false);
+        });
+
+        CompletableFuture.delayedExecutor(ROUTE_ERROR_DISPLAY_MS, TimeUnit.MILLISECONDS).execute(() -> {
+            MinecraftClient delayedClient = MinecraftClient.getInstance();
+            if (delayedClient == null) {
+                return;
+            }
+            delayedClient.execute(() -> {
+                if (!errorText.equals(chatField.getText())) {
+                    return;
+                }
+                chatField.setText(fallbackText);
+                chatField.setCursor(fallbackText.length(), false);
+            });
+        });
     }
 }

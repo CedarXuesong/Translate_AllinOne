@@ -57,18 +57,30 @@ public final class ConfigUiScreenRenderSupport {
             boolean modelSettingsModalOpen,
             boolean customParametersModalOpen,
             boolean resetConfirmModalOpen,
+            boolean updateNoticeModalOpen,
             Text addProviderTitle,
             Text modelSettingsTitle,
             Text customParametersTitle,
             Text resetConfirmTitle,
+            Text updateNoticeTitle,
             Style style
     ) {
-        if (!ConfigUiModalSupport.isAnyModalOpen(addProviderModalOpen, modelSettingsModalOpen, customParametersModalOpen, resetConfirmModalOpen)) {
+        if (!ConfigUiModalSupport.isAnyModalOpen(addProviderModalOpen, modelSettingsModalOpen, customParametersModalOpen, resetConfirmModalOpen, updateNoticeModalOpen)) {
             return;
         }
 
         context.fill(0, topBarHeight, screenWidth, screenHeight, style.colorModalOverlay());
-        if (resetConfirmModalOpen) {
+        if (updateNoticeModalOpen) {
+            ConfigUiModalSupport.renderModalShell(
+                    context,
+                    textRenderer,
+                    ConfigUiModalSupport.updateNoticeModalRect(screenWidth, screenHeight),
+                    updateNoticeTitle,
+                    style.colorMainPanel(),
+                    style.colorBorder(),
+                    style.colorText()
+            );
+        } else if (resetConfirmModalOpen) {
             ConfigUiModalSupport.renderModalShell(
                     context,
                     textRenderer,
