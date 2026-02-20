@@ -32,6 +32,7 @@ public class ScoreboardTranslateManager {
 
     private ExecutorService workerExecutor;
     private ScheduledExecutorService collectorExecutor;
+    private ScheduledExecutorService retryExecutor;
     private ScheduledExecutorService rateLimiterExecutor;
     private final ScoreboardTextCache cache = ScoreboardTextCache.getInstance();
     private Semaphore rateLimiter;
@@ -73,6 +74,12 @@ public class ScoreboardTranslateManager {
             Translate_AllinOne.LOGGER.info("Scoreboard translation collector started.");
         }
 
+        if (retryExecutor == null || retryExecutor.isShutdown()) {
+            retryExecutor = Executors.newSingleThreadScheduledExecutor();
+            retryExecutor.scheduleAtFixedRate(this::requeueErroredItems, 15, 15, TimeUnit.SECONDS);
+            Translate_AllinOne.LOGGER.info("Scoreboard translation retry scheduler started.");
+        }
+
         updateRateLimiter();
     }
 
@@ -91,6 +98,10 @@ public class ScoreboardTranslateManager {
         if (collectorExecutor != null && !collectorExecutor.isShutdown()) {
             collectorExecutor.shutdownNow();
             Translate_AllinOne.LOGGER.info("Scoreboard translation collector stopped.");
+        }
+        if (retryExecutor != null && !retryExecutor.isShutdown()) {
+            retryExecutor.shutdownNow();
+            Translate_AllinOne.LOGGER.info("Scoreboard translation retry scheduler stopped.");
         }
         if (rateLimiterExecutor != null && !rateLimiterExecutor.isShutdown()) {
             rateLimiterExecutor.shutdownNow();
@@ -119,8 +130,6 @@ public class ScoreboardTranslateManager {
                 nextPermitReleaseTime = System.currentTimeMillis() + delayBetweenPermits;
 
                 rateLimiterExecutor = Executors.newSingleThreadScheduledExecutor();
-                rateLimiterExecutor.scheduleAtFixedRate(this::requeueErroredItems, 15, 15, TimeUnit.SECONDS);
-                
                 rateLimiterExecutor.scheduleAtFixedRate(() -> {
                     if (rateLimiter.availablePermits() < burstSize) {
                         rateLimiter.release();

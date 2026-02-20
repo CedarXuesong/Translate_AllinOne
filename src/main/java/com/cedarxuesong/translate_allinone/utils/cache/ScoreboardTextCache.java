@@ -10,8 +10,10 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Type;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -103,11 +105,19 @@ public class ScoreboardTextCache {
 
         try {
             Files.createDirectories(cacheFilePath.getParent());
-            try (FileWriter writer = new FileWriter(cacheFilePath.toFile())) {
+            Path tempPath = cacheFilePath.resolveSibling(cacheFilePath.getFileName() + ".tmp");
+            try (FileWriter writer = new FileWriter(tempPath.toFile())) {
                 GSON.toJson(templateCache, writer);
+            }
+
+            try {
+                Files.move(tempPath, cacheFilePath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(tempPath, cacheFilePath, StandardCopyOption.REPLACE_EXISTING);
+            }
+
                 Translate_AllinOne.LOGGER.info("Successfully saved {} scoreboard translation cache entries.", templateCache.size());
                 isDirty = false;
-            }
         } catch (IOException e) {
             Translate_AllinOne.LOGGER.error("Failed to save scoreboard translation cache", e);
         }
