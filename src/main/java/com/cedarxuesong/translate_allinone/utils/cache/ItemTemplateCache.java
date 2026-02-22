@@ -71,8 +71,7 @@ public class ItemTemplateCache {
         return INSTANCE;
     }
 
-    public void load() {
-        templateCache.clear();
+    public synchronized void load() {
         pendingQueue.clear();
         inProgress.clear();
         batchWorkQueue.clear();
@@ -85,10 +84,14 @@ public class ItemTemplateCache {
                 Map<String, String> loadedCache = GSON.fromJson(reader, type);
                 if (loadedCache != null) {
                     templateCache.putAll(loadedCache);
-                    Translate_AllinOne.LOGGER.info("Successfully loaded {} item translation cache entries.", templateCache.size());
+                    Translate_AllinOne.LOGGER.info(
+                            "Successfully loaded {} item translation cache entries (in-memory total: {}).",
+                            loadedCache.size(),
+                            templateCache.size()
+                    );
                 }
-            } catch (IOException e) {
-                Translate_AllinOne.LOGGER.error("Failed to load item translation cache", e);
+            } catch (IOException | RuntimeException e) {
+                Translate_AllinOne.LOGGER.error("Failed to load item translation cache. Keeping in-memory entries untouched.", e);
             }
         } else {
             Translate_AllinOne.LOGGER.info("Item translation cache file not found, a new one will be created upon saving.");
