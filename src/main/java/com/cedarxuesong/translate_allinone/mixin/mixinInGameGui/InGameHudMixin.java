@@ -40,6 +40,9 @@ public class InGameHudMixin {
     private static final String MISSING_KEY_HINT = "missing key";
 
     @Unique
+    private static final String KEY_MISMATCH_HINT = "key mismatch";
+
+    @Unique
     private static final ThreadLocal<Map<String, Text>> translate_allinone$scoreboardReplacements = new ThreadLocal<>();
 
     @Unique
@@ -54,8 +57,9 @@ public class InGameHudMixin {
         String legacyTemplateKey = StylePreserver.toLegacyTemplate(unicodeTemplate, styleResult.styleMap);
 
         ScoreboardTextCache cache = ScoreboardTextCache.getInstance();
-        ScoreboardTextCache.TranslationStatus status = cache.getTemplateStatus(legacyTemplateKey);
-        String translatedTemplate = cache.getOrQueue(legacyTemplateKey);
+        ScoreboardTextCache.LookupResult lookupResult = cache.lookupOrQueue(legacyTemplateKey);
+        ScoreboardTextCache.TranslationStatus status = lookupResult.status();
+        String translatedTemplate = lookupResult.translation();
 
         if (status == ScoreboardTextCache.TranslationStatus.TRANSLATED) {
             String reassembledTranslated = TemplateProcessor.reassemble(translatedTemplate, templateResult.values);
@@ -66,7 +70,7 @@ public class InGameHudMixin {
         Text originalTextObject = StylePreserver.reapplyStyles(reassembledOriginal, styleResult.styleMap);
 
         if (status == ScoreboardTextCache.TranslationStatus.ERROR) {
-            String errorMessage = cache.getError(legacyTemplateKey);
+            String errorMessage = lookupResult.errorMessage();
             if (translate_allinone$isMissingKeyIssue(errorMessage)) {
                 return AnimationManager.getAnimatedStyledText(originalTextObject, legacyTemplateKey, true);
             }
@@ -82,7 +86,8 @@ public class InGameHudMixin {
         if (errorMessage == null || errorMessage.isEmpty()) {
             return false;
         }
-        return errorMessage.toLowerCase(Locale.ROOT).contains(MISSING_KEY_HINT);
+        String lower = errorMessage.toLowerCase(Locale.ROOT);
+        return lower.contains(MISSING_KEY_HINT) || lower.contains(KEY_MISMATCH_HINT);
     }
 
     @Inject(

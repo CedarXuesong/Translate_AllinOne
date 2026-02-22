@@ -21,31 +21,36 @@ public class LifecycleEventManager {
     private static final int GRACE_PERIOD_DURATION_TICKS = 20; // 1 second (20 ticks/sec)
 
     public static void register() {
-        // Add a shutdown hook to save the cache on game exit
+        registerShutdownHook();
+        registerJoinHandler();
+        registerReadinessTickHandler();
+        registerDisconnectHandler();
+    }
+
+    private static void registerShutdownHook() {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             LOGGER.info("Game is shutting down, performing final cache save...");
-            ItemTemplateCache.getInstance().save();
-            ScoreboardTextCache.getInstance().save();
+            saveCaches();
         }));
+    }
 
+    private static void registerJoinHandler() {
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
-            isReadyForTranslation = false;
+            resetReadinessState();
             awaitingReadinessCheck = true;
-            readinessGracePeriodTicks = -1;
             LOGGER.info("Player joining world, awaiting client readiness for translation...");
-            ItemTemplateCache.getInstance().load();
-            ItemTranslateManager.getInstance().start();
-            ScoreboardTextCache.getInstance().load();
-            ScoreboardTranslateManager.getInstance().start();
-        });
 
+            stopTranslationManagers();
+            loadCachesAndStartTranslationManagers();
+        });
+    }
+
+    private static void registerReadinessTickHandler() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (awaitingReadinessCheck) {
-                if (client.player != null && client.world != null && client.currentScreen == null) {
-                    awaitingReadinessCheck = false;
-                    readinessGracePeriodTicks = GRACE_PERIOD_DURATION_TICKS; // Start grace period
-                    LOGGER.info("Client is ready. Starting grace period for {} ticks before enabling translations.", readinessGracePeriodTicks);
-                }
+            if (awaitingReadinessCheck && client.player != null && client.world != null && client.currentScreen == null) {
+                awaitingReadinessCheck = false;
+                readinessGracePeriodTicks = GRACE_PERIOD_DURATION_TICKS;
+                LOGGER.info("Client is ready. Starting grace period for {} ticks before enabling translations.", readinessGracePeriodTicks);
             }
 
             if (readinessGracePeriodTicks > 0) {
@@ -60,16 +65,37 @@ public class LifecycleEventManager {
                 UpdateCheckManager.tryNotifyInChat(client);
             }
         });
+    }
 
+    private static void registerDisconnectHandler() {
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
-            isReadyForTranslation = false;
-            awaitingReadinessCheck = false;
-            readinessGracePeriodTicks = -1;
+            resetReadinessState();
             LOGGER.info("Player has disconnected. Translation readiness reset.");
-            ItemTranslateManager.getInstance().stop();
-            ItemTemplateCache.getInstance().save();
-            ScoreboardTranslateManager.getInstance().stop();
-            ScoreboardTextCache.getInstance().save();
+            stopTranslationManagers();
+            saveCaches();
         });
     }
-} 
+
+    private static void stopTranslationManagers() {
+        ItemTranslateManager.getInstance().stop();
+        ScoreboardTranslateManager.getInstance().stop();
+    }
+
+    private static void loadCachesAndStartTranslationManagers() {
+        ItemTemplateCache.getInstance().load();
+        ItemTranslateManager.getInstance().start();
+        ScoreboardTextCache.getInstance().load();
+        ScoreboardTranslateManager.getInstance().start();
+    }
+
+    private static void saveCaches() {
+        ItemTemplateCache.getInstance().save();
+        ScoreboardTextCache.getInstance().save();
+    }
+
+    private static void resetReadinessState() {
+        isReadyForTranslation = false;
+        awaitingReadinessCheck = false;
+        readinessGracePeriodTicks = -1;
+    }
+}

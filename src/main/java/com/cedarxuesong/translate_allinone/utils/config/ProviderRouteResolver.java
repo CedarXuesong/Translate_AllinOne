@@ -68,7 +68,10 @@ public final class ProviderRouteResolver {
         snapshot.api_key = source.api_key;
 
         snapshot.model_id = modelSettings.model_id;
-        snapshot.model_ids = new ArrayList<>(List.of(modelSettings.model_id));
+        snapshot.model_ids = new ArrayList<>(1);
+        snapshot.model_ids.add(modelSettings.model_id);
+
+        List<CustomParameterEntry> customParametersCopy = cloneCustomParameters(modelSettings.custom_parameters);
 
         ApiProviderProfile.ModelSettings modelCopy = new ApiProviderProfile.ModelSettings();
         modelCopy.model_id = modelSettings.model_id;
@@ -78,8 +81,9 @@ public final class ProviderRouteResolver {
         modelCopy.supports_system_message = modelSettings.supports_system_message;
         modelCopy.inject_system_prompt_into_user_message = modelSettings.inject_system_prompt_into_user_message;
         modelCopy.system_prompt_suffix = modelSettings.system_prompt_suffix;
-        modelCopy.custom_parameters = cloneCustomParameters(modelSettings.custom_parameters);
-        snapshot.model_settings = new ArrayList<>(List.of(modelCopy));
+        modelCopy.custom_parameters = customParametersCopy;
+        snapshot.model_settings = new ArrayList<>(1);
+        snapshot.model_settings.add(modelCopy);
 
         snapshot.temperature = modelCopy.temperature;
         snapshot.keep_alive_time = modelCopy.keep_alive_time;
@@ -87,7 +91,7 @@ public final class ProviderRouteResolver {
         snapshot.supports_system_message = modelCopy.supports_system_message;
         snapshot.inject_system_prompt_into_user_message = modelCopy.inject_system_prompt_into_user_message;
         snapshot.system_prompt_suffix = modelCopy.system_prompt_suffix;
-        snapshot.custom_parameters = cloneCustomParameters(modelCopy.custom_parameters);
+        snapshot.custom_parameters = customParametersCopy;
         return snapshot;
     }
 

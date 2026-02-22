@@ -18,7 +18,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -33,14 +32,9 @@ public class ScoreboardTranslateManager {
     private ExecutorService workerExecutor;
     private ScheduledExecutorService collectorExecutor;
     private ScheduledExecutorService retryExecutor;
-    private ScheduledExecutorService rateLimiterExecutor;
     private final ScoreboardTextCache cache = ScoreboardTextCache.getInstance();
-    private Semaphore rateLimiter;
-    private int currentRpm = -1;
     private int currentConcurrentRequests = -1;
-    private volatile long nextPermitReleaseTime = 0;
-
-    public record RateLimitStatus(boolean isRateLimited, long estimatedWaitSeconds) {}
+    private final java.util.concurrent.atomic.AtomicLong sessionEpoch = new java.util.concurrent.atomic.AtomicLong(0);
 
     private ScoreboardTranslateManager() {}
 
@@ -48,16 +42,10 @@ public class ScoreboardTranslateManager {
         return INSTANCE;
     }
 
-    public RateLimitStatus getRateLimitStatus() {
-        if (rateLimiter == null || rateLimiter.availablePermits() > 0 || currentRpm <= 0) {
-            return new RateLimitStatus(false, 0);
-        }
-        long waitMillis = nextPermitReleaseTime - System.currentTimeMillis();
-        long waitSeconds = Math.max(0, (long) Math.ceil(waitMillis / 1000.0));
-        return new RateLimitStatus(true, waitSeconds);
-    }
+    public synchronized void start() {
+        long newSessionEpoch = sessionEpoch.incrementAndGet();
+        Translate_AllinOne.LOGGER.info("Scoreboard translation session started. epoch={}", newSessionEpoch);
 
-    public void start() {
         if (workerExecutor == null || workerExecutor.isShutdown()) {
             ScoreboardConfig config = Translate_AllinOne.getConfig().scoreboardTranslate;
             currentConcurrentRequests = Math.max(1, config.max_concurrent_requests);
@@ -80,10 +68,12 @@ public class ScoreboardTranslateManager {
             Translate_AllinOne.LOGGER.info("Scoreboard translation retry scheduler started.");
         }
 
-        updateRateLimiter();
     }
 
-    public void stop() {
+    public synchronized void stop() {
+        long invalidatedSessionEpoch = sessionEpoch.incrementAndGet();
+        Translate_AllinOne.LOGGER.info("Scoreboard translation session invalidated. epoch={}", invalidatedSessionEpoch);
+
         if (workerExecutor != null && !workerExecutor.isShutdown()) {
             workerExecutor.shutdownNow();
             try {
@@ -103,53 +93,13 @@ public class ScoreboardTranslateManager {
             retryExecutor.shutdownNow();
             Translate_AllinOne.LOGGER.info("Scoreboard translation retry scheduler stopped.");
         }
-        if (rateLimiterExecutor != null && !rateLimiterExecutor.isShutdown()) {
-            rateLimiterExecutor.shutdownNow();
-            Translate_AllinOne.LOGGER.info("ScoreboardTranslateManager's rate limiter thread stopped.");
-        }
-    }
-
-    private void updateRateLimiter() {
-        ScoreboardConfig config = Translate_AllinOne.getConfig().scoreboardTranslate;
-        int newRpm = config.requests_per_minute;
-        int newConcurrentRequests = Math.max(1, config.max_concurrent_requests);
-
-        if (newRpm != currentRpm || newConcurrentRequests != currentConcurrentRequests) {
-            currentRpm = newRpm;
-            currentConcurrentRequests = newConcurrentRequests;
-
-            if (rateLimiterExecutor != null && !rateLimiterExecutor.isShutdown()) {
-                rateLimiterExecutor.shutdownNow();
-            }
-
-            if (currentRpm > 0) {
-                final int burstSize = Math.max(1, currentRpm / 30);
-                rateLimiter = new Semaphore(burstSize, true);
-
-                long delayBetweenPermits = 60 * 1000L / currentRpm;
-                nextPermitReleaseTime = System.currentTimeMillis() + delayBetweenPermits;
-
-                rateLimiterExecutor = Executors.newSingleThreadScheduledExecutor();
-                rateLimiterExecutor.scheduleAtFixedRate(() -> {
-                    if (rateLimiter.availablePermits() < burstSize) {
-                        rateLimiter.release();
-                    }
-                    nextPermitReleaseTime = System.currentTimeMillis() + delayBetweenPermits;
-                }, delayBetweenPermits, delayBetweenPermits, TimeUnit.MILLISECONDS);
-
-                Translate_AllinOne.LOGGER.info("Scoreboard rate limiter updated to {} RPM (1 permit every {}ms), initial permits: {}.", currentRpm, delayBetweenPermits, burstSize);
-            } else {
-                rateLimiter = null; // No limit
-                nextPermitReleaseTime = 0;
-                Translate_AllinOne.LOGGER.info("Scoreboard rate limiter disabled.");
-            }
-        }
     }
 
     private void processingLoop() {
         while (!Thread.currentThread().isInterrupted()) {
             List<String> batch = null;
             try {
+                long batchSessionEpoch = sessionEpoch.get();
                 ScoreboardConfig config = Translate_AllinOne.getConfig().scoreboardTranslate;
                 if (!config.enabled) {
                     TimeUnit.SECONDS.sleep(5);
@@ -159,11 +109,12 @@ public class ScoreboardTranslateManager {
                 batch = cache.takeBatchForTranslation();
                 cache.markAsInProgress(batch);
 
-                if (rateLimiter != null) {
-                    rateLimiter.acquire();
+                if (!isSessionActive(batchSessionEpoch)) {
+                    cache.releaseInProgress(new java.util.HashSet<>(batch));
+                    continue;
                 }
 
-                translateBatch(batch, config);
+                translateBatch(batch, config, batchSessionEpoch);
 
             } catch (InterruptedException e) {
                 if (batch != null && !batch.isEmpty()) {
@@ -216,12 +167,17 @@ public class ScoreboardTranslateManager {
         }
     }
 
-    private void translateBatch(List<String> originalTexts, ScoreboardConfig config) {
-        translateBatch(originalTexts, config, 0);
+    private void translateBatch(List<String> originalTexts, ScoreboardConfig config, long batchSessionEpoch) {
+        translateBatch(originalTexts, config, 0, batchSessionEpoch);
     }
 
-    private void translateBatch(List<String> originalTexts, ScoreboardConfig config, int keyMismatchRetryCount) {
+    private void translateBatch(List<String> originalTexts, ScoreboardConfig config, int keyMismatchRetryCount, long batchSessionEpoch) {
         if (originalTexts.isEmpty()) {
+            return;
+        }
+
+        if (!isSessionActive(batchSessionEpoch)) {
+            cache.releaseInProgress(new java.util.HashSet<>(originalTexts));
             return;
         }
         
@@ -256,6 +212,17 @@ public class ScoreboardTranslateManager {
         String requestContext = buildRequestContext(providerProfile, config.target_language, originalTexts, messages);
 
         llm.getCompletion(messages).whenComplete((response, error) -> {
+            if (!isSessionActive(batchSessionEpoch)) {
+                cache.releaseInProgress(new java.util.HashSet<>(originalTexts));
+                Translate_AllinOne.LOGGER.debug(
+                        "Dropping stale scoreboard translation callback. requestEpoch={}, activeEpoch={}, context={}",
+                        batchSessionEpoch,
+                        sessionEpoch.get(),
+                        requestContext
+                );
+                return;
+            }
+
             if (error != null) {
                 if (isInternalPostprocessError(error) && originalTexts.size() > 1) {
                     Translate_AllinOne.LOGGER.warn(
@@ -264,7 +231,7 @@ public class ScoreboardTranslateManager {
                             originalTexts.size()
                     );
                     for (String text : originalTexts) {
-                        translateBatch(List.of(text), config);
+                        translateBatch(List.of(text), config, batchSessionEpoch);
                     }
                     return;
                 }
@@ -293,7 +260,7 @@ public class ScoreboardTranslateManager {
                                     MAX_KEY_MISMATCH_BATCH_RETRIES,
                                     requestContext
                             );
-                            translateBatch(new java.util.ArrayList<>(originalTexts), config, nextAttempt);
+                            translateBatch(new java.util.ArrayList<>(originalTexts), config, nextAttempt, batchSessionEpoch);
                         } else {
                             Translate_AllinOne.LOGGER.warn(
                                     "Scoreboard translation keys mismatched after retries, re-queueing full batch. context={}",
@@ -361,8 +328,15 @@ public class ScoreboardTranslateManager {
             } catch (JsonSyntaxException e) {
                 Translate_AllinOne.LOGGER.error("Failed to parse JSON response from LLM for scoreboard. Response: {}", response, e);
                 cache.requeueFailed(new java.util.HashSet<>(originalTexts), "Invalid JSON response");
+            } catch (Throwable t) {
+                Translate_AllinOne.LOGGER.error("Unexpected scoreboard translation post-processing error. context={}", requestContext, t);
+                cache.requeueFailed(new java.util.HashSet<>(originalTexts), "Translation post-processing failure");
             }
         });
+    }
+
+    private boolean isSessionActive(long expectedEpoch) {
+        return expectedEpoch == sessionEpoch.get();
     }
 
     private boolean hasKeyMismatch(Map<String, String> translatedMapFromAI, int expectedSize) {

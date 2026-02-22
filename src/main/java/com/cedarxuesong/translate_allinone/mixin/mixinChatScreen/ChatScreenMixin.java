@@ -1,6 +1,8 @@
 package com.cedarxuesong.translate_allinone.mixin.mixinChatScreen;
 
 import com.cedarxuesong.translate_allinone.Translate_AllinOne;
+import com.cedarxuesong.translate_allinone.gui.chatinput.ChatInputPanelAction;
+import com.cedarxuesong.translate_allinone.gui.chatinput.ChatInputPanelRect;
 import com.cedarxuesong.translate_allinone.gui.configui.render.ConfigUiDraw;
 import com.cedarxuesong.translate_allinone.utils.input.KeybindingManager;
 import com.cedarxuesong.translate_allinone.utils.translate.ChatInputTranslateManager;
@@ -249,7 +251,7 @@ public class ChatScreenMixin {
         ChatInputTranslateManager.PanelAvailability availability = translate_allinone$getPanelAvailability();
         double mouseX = click.x();
         double mouseY = click.y();
-        PanelRect panelRect = translate_allinone$panelRect();
+        ChatInputPanelRect panelRect = translate_allinone$panelRect();
         if (!panelRect.contains(mouseX, mouseY)) {
             if (this.translate_allinone$instructionField != null) {
                 this.translate_allinone$instructionField.setFocused(false);
@@ -257,7 +259,7 @@ public class ChatScreenMixin {
             return;
         }
 
-        PanelRect headerRect = translate_allinone$headerRect(panelRect);
+        ChatInputPanelRect headerRect = translate_allinone$headerRect(panelRect);
         if (headerRect.contains(mouseX, mouseY)) {
             panelDragging = true;
             dragOffsetX = mouseX - panelX;
@@ -269,7 +271,7 @@ public class ChatScreenMixin {
             return;
         }
 
-        PanelRect inputOuterRect = translate_allinone$instructionInputOuterRect(panelRect);
+        ChatInputPanelRect inputOuterRect = translate_allinone$instructionInputOuterRect(panelRect);
         if (inputOuterRect.contains(mouseX, mouseY)) {
             if (this.translate_allinone$instructionField != null && translate_allinone$isInstructionEnabled(availability)) {
                 this.translate_allinone$instructionField.setFocused(true);
@@ -285,14 +287,14 @@ public class ChatScreenMixin {
             this.translate_allinone$instructionField.setFocused(false);
         }
 
-        PanelRect applyRect = translate_allinone$instructionApplyButtonRect(panelRect);
+        ChatInputPanelRect applyRect = translate_allinone$instructionApplyButtonRect(panelRect);
         if (applyRect.contains(mouseX, mouseY) && translate_allinone$isInstructionEnabled(availability)) {
             translate_allinone$applyInstruction();
             cir.setReturnValue(true);
             return;
         }
 
-        PanelAction action = translate_allinone$findActionAt(mouseX, mouseY, panelRect);
+        ChatInputPanelAction action = translate_allinone$findActionAt(mouseX, mouseY, panelRect);
         if (action != null && translate_allinone$isActionEnabled(action, availability)) {
             translate_allinone$performAction(action);
         }
@@ -320,12 +322,12 @@ public class ChatScreenMixin {
     }
 
     @Unique
-    private boolean translate_allinone$isActionEnabled(PanelAction action, ChatInputTranslateManager.PanelAvailability availability) {
+    private boolean translate_allinone$isActionEnabled(ChatInputPanelAction action, ChatInputTranslateManager.PanelAvailability availability) {
         if (availability == ChatInputTranslateManager.PanelAvailability.NO_MODEL) {
             return false;
         }
         if (availability == ChatInputTranslateManager.PanelAvailability.TRANSLATE_ONLY) {
-            return action == PanelAction.TRANSLATE;
+            return action == ChatInputPanelAction.TRANSLATE;
         }
         return true;
     }
@@ -396,7 +398,7 @@ public class ChatScreenMixin {
             return;
         }
 
-        PanelRect inputRect = translate_allinone$instructionInputInnerRect(translate_allinone$panelRect());
+        ChatInputPanelRect inputRect = translate_allinone$instructionInputInnerRect(translate_allinone$panelRect());
         this.translate_allinone$instructionField = new TextFieldWidget(
                 client.textRenderer,
                 inputRect.x(),
@@ -413,11 +415,11 @@ public class ChatScreenMixin {
     }
 
     @Unique
-    private void translate_allinone$layoutInstructionField(PanelRect panelRect) {
+    private void translate_allinone$layoutInstructionField(ChatInputPanelRect panelRect) {
         if (this.translate_allinone$instructionField == null) {
             return;
         }
-        PanelRect inputRect = translate_allinone$instructionInputInnerRect(panelRect);
+        ChatInputPanelRect inputRect = translate_allinone$instructionInputInnerRect(panelRect);
         this.translate_allinone$instructionField.setX(inputRect.x());
         this.translate_allinone$instructionField.setY(inputRect.y());
     }
@@ -436,10 +438,10 @@ public class ChatScreenMixin {
         }
 
         TextRenderer textRenderer = client.textRenderer;
-        PanelRect panelRect = translate_allinone$panelRect();
-        PanelRect headerRect = translate_allinone$headerRect(panelRect);
-        PanelRect quickCardRect = translate_allinone$quickActionCardRect(panelRect);
-        PanelRect instructionCardRect = translate_allinone$instructionCardRect(panelRect);
+        ChatInputPanelRect panelRect = translate_allinone$panelRect();
+        ChatInputPanelRect headerRect = translate_allinone$headerRect(panelRect);
+        ChatInputPanelRect quickCardRect = translate_allinone$quickActionCardRect(panelRect);
+        ChatInputPanelRect instructionCardRect = translate_allinone$instructionCardRect(panelRect);
 
         context.fill(panelRect.x() + 2, panelRect.y() + 2, panelRect.right() + 2, panelRect.bottom() + 2, COLOR_PANEL_SHADOW);
         context.fill(panelRect.x(), panelRect.y(), panelRect.right(), panelRect.bottom(), COLOR_PANEL_BG);
@@ -468,9 +470,9 @@ public class ChatScreenMixin {
         translate_allinone$drawCardShell(context, quickCardRect, Text.translatable("text.translate_allinone.chat_input_panel.quick_actions"), textRenderer);
         translate_allinone$drawCardShell(context, instructionCardRect, Text.translatable("text.translate_allinone.chat_input_panel.instruction"), textRenderer);
 
-        PanelAction[] actions = PanelAction.values();
+        ChatInputPanelAction[] actions = ChatInputPanelAction.values();
         for (int i = 0; i < actions.length; i++) {
-            PanelRect buttonRect = translate_allinone$actionButtonRect(quickCardRect, i);
+            ChatInputPanelRect buttonRect = translate_allinone$actionButtonRect(quickCardRect, i);
             boolean enabled = translate_allinone$isActionEnabled(actions[i], availability);
             boolean hovered = enabled && buttonRect.contains(mouseX, mouseY);
 
@@ -507,7 +509,7 @@ public class ChatScreenMixin {
         }
 
         boolean instructionEnabled = translate_allinone$isInstructionEnabled(availability);
-        PanelRect inputOuterRect = translate_allinone$instructionInputOuterRect(panelRect);
+        ChatInputPanelRect inputOuterRect = translate_allinone$instructionInputOuterRect(panelRect);
         context.fill(
                 inputOuterRect.x(),
                 inputOuterRect.y(),
@@ -543,7 +545,7 @@ public class ChatScreenMixin {
             }
         }
 
-        PanelRect applyRect = translate_allinone$instructionApplyButtonRect(panelRect);
+        ChatInputPanelRect applyRect = translate_allinone$instructionApplyButtonRect(panelRect);
         boolean applyEnabled = instructionEnabled;
         boolean applyHovered = applyEnabled && applyRect.contains(mouseX, mouseY);
         context.fill(
@@ -577,16 +579,16 @@ public class ChatScreenMixin {
     }
 
     @Unique
-    private void translate_allinone$drawCardShell(DrawContext context, PanelRect cardRect, Text title, TextRenderer textRenderer) {
+    private void translate_allinone$drawCardShell(DrawContext context, ChatInputPanelRect cardRect, Text title, TextRenderer textRenderer) {
         context.fill(cardRect.x(), cardRect.y(), cardRect.right(), cardRect.bottom(), COLOR_CARD_BG);
         ConfigUiDraw.drawOutline(context, cardRect.x(), cardRect.y(), cardRect.width(), cardRect.height(), COLOR_CARD_BORDER);
         context.drawText(textRenderer, title, cardRect.x() + CARD_PADDING, cardRect.y() + CARD_PADDING - 1, COLOR_CARD_TITLE, false);
     }
 
     @Unique
-    private PanelAction translate_allinone$findActionAt(double mouseX, double mouseY, PanelRect panelRect) {
-        PanelRect quickCardRect = translate_allinone$quickActionCardRect(panelRect);
-        PanelAction[] actions = PanelAction.values();
+    private ChatInputPanelAction translate_allinone$findActionAt(double mouseX, double mouseY, ChatInputPanelRect panelRect) {
+        ChatInputPanelRect quickCardRect = translate_allinone$quickActionCardRect(panelRect);
+        ChatInputPanelAction[] actions = ChatInputPanelAction.values();
         for (int i = 0; i < actions.length; i++) {
             if (translate_allinone$actionButtonRect(quickCardRect, i).contains(mouseX, mouseY)) {
                 return actions[i];
@@ -596,7 +598,7 @@ public class ChatScreenMixin {
     }
 
     @Unique
-    private void translate_allinone$performAction(PanelAction action) {
+    private void translate_allinone$performAction(ChatInputPanelAction action) {
         switch (action) {
             case TRANSLATE -> ChatInputTranslateManager.translate(this.chatField);
             case PROFESSIONAL -> ChatInputTranslateManager.translateProfessional(this.chatField);
@@ -651,35 +653,35 @@ public class ChatScreenMixin {
     }
 
     @Unique
-    private PanelRect translate_allinone$panelRect() {
-        return new PanelRect((int) Math.round(panelX), (int) Math.round(panelY), PANEL_WIDTH, PANEL_HEIGHT);
+    private ChatInputPanelRect translate_allinone$panelRect() {
+        return new ChatInputPanelRect((int) Math.round(panelX), (int) Math.round(panelY), PANEL_WIDTH, PANEL_HEIGHT);
     }
 
     @Unique
-    private PanelRect translate_allinone$headerRect(PanelRect panelRect) {
-        return new PanelRect(panelRect.x() + 1, panelRect.y() + 1, panelRect.width() - 2, HEADER_HEIGHT - 1);
+    private ChatInputPanelRect translate_allinone$headerRect(ChatInputPanelRect panelRect) {
+        return new ChatInputPanelRect(panelRect.x() + 1, panelRect.y() + 1, panelRect.width() - 2, HEADER_HEIGHT - 1);
     }
 
     @Unique
-    private PanelRect translate_allinone$quickActionCardRect(PanelRect panelRect) {
+    private ChatInputPanelRect translate_allinone$quickActionCardRect(ChatInputPanelRect panelRect) {
         int x = panelRect.x() + PANEL_PADDING;
         int y = panelRect.y() + HEADER_HEIGHT + PANEL_PADDING;
         int width = panelRect.width() - PANEL_PADDING * 2;
-        return new PanelRect(x, y, width, QUICK_ACTION_CARD_HEIGHT);
+        return new ChatInputPanelRect(x, y, width, QUICK_ACTION_CARD_HEIGHT);
     }
 
     @Unique
-    private PanelRect translate_allinone$instructionCardRect(PanelRect panelRect) {
-        PanelRect quickCardRect = translate_allinone$quickActionCardRect(panelRect);
+    private ChatInputPanelRect translate_allinone$instructionCardRect(ChatInputPanelRect panelRect) {
+        ChatInputPanelRect quickCardRect = translate_allinone$quickActionCardRect(panelRect);
         int x = panelRect.x() + PANEL_PADDING;
         int y = quickCardRect.bottom() + CARD_GAP;
         int width = panelRect.width() - PANEL_PADDING * 2;
         int height = panelRect.bottom() - PANEL_PADDING - y;
-        return new PanelRect(x, y, width, height);
+        return new ChatInputPanelRect(x, y, width, height);
     }
 
     @Unique
-    private PanelRect translate_allinone$actionButtonRect(PanelRect quickCardRect, int index) {
+    private ChatInputPanelRect translate_allinone$actionButtonRect(ChatInputPanelRect quickCardRect, int index) {
         int columns = 2;
         int columnWidth = (quickCardRect.width() - CARD_PADDING * 2 - BUTTON_GAP) / columns;
         int column = index % columns;
@@ -687,28 +689,28 @@ public class ChatScreenMixin {
 
         int x = quickCardRect.x() + CARD_PADDING + column * (columnWidth + BUTTON_GAP);
         int y = quickCardRect.y() + CARD_PADDING + CARD_TITLE_HEIGHT + 4 + row * (BUTTON_HEIGHT + BUTTON_GAP);
-        return new PanelRect(x, y, columnWidth, BUTTON_HEIGHT);
+        return new ChatInputPanelRect(x, y, columnWidth, BUTTON_HEIGHT);
     }
 
     @Unique
-    private PanelRect translate_allinone$instructionInputOuterRect(PanelRect panelRect) {
-        PanelRect instructionCardRect = translate_allinone$instructionCardRect(panelRect);
+    private ChatInputPanelRect translate_allinone$instructionInputOuterRect(ChatInputPanelRect panelRect) {
+        ChatInputPanelRect instructionCardRect = translate_allinone$instructionCardRect(panelRect);
         int x = instructionCardRect.x() + CARD_PADDING;
         int y = instructionCardRect.y() + CARD_PADDING + CARD_TITLE_HEIGHT + 4;
         int width = instructionCardRect.width() - CARD_PADDING * 2 - APPLY_BUTTON_WIDTH - BUTTON_GAP;
-        return new PanelRect(x, y, width, INPUT_OUTER_HEIGHT);
+        return new ChatInputPanelRect(x, y, width, INPUT_OUTER_HEIGHT);
     }
 
     @Unique
-    private PanelRect translate_allinone$instructionInputInnerRect(PanelRect panelRect) {
-        PanelRect outerRect = translate_allinone$instructionInputOuterRect(panelRect);
-        return new PanelRect(outerRect.x() + 2, outerRect.y() + 2, outerRect.width() - 4, outerRect.height() - 4);
+    private ChatInputPanelRect translate_allinone$instructionInputInnerRect(ChatInputPanelRect panelRect) {
+        ChatInputPanelRect outerRect = translate_allinone$instructionInputOuterRect(panelRect);
+        return new ChatInputPanelRect(outerRect.x() + 2, outerRect.y() + 2, outerRect.width() - 4, outerRect.height() - 4);
     }
 
     @Unique
-    private PanelRect translate_allinone$instructionApplyButtonRect(PanelRect panelRect) {
-        PanelRect inputOuterRect = translate_allinone$instructionInputOuterRect(panelRect);
-        return new PanelRect(inputOuterRect.right() + BUTTON_GAP, inputOuterRect.y(), APPLY_BUTTON_WIDTH, inputOuterRect.height());
+    private ChatInputPanelRect translate_allinone$instructionApplyButtonRect(ChatInputPanelRect panelRect) {
+        ChatInputPanelRect inputOuterRect = translate_allinone$instructionInputOuterRect(panelRect);
+        return new ChatInputPanelRect(inputOuterRect.right() + BUTTON_GAP, inputOuterRect.y(), APPLY_BUTTON_WIDTH, inputOuterRect.height());
     }
 
     @Unique
@@ -723,50 +725,4 @@ public class ChatScreenMixin {
         return client == null ? 240 : client.getWindow().getScaledHeight();
     }
 
-    @Unique
-    private enum PanelAction {
-        TRANSLATE("text.translate_allinone.chat_input_panel.translate", "T", 0xFF569BE6),
-        PROFESSIONAL("text.translate_allinone.chat_input_panel.professional", "P", 0xFF4CB08A),
-        FRIENDLY("text.translate_allinone.chat_input_panel.friendly", "F", 0xFFE0A75B),
-        EXPAND("text.translate_allinone.chat_input_panel.expand", "+", 0xFF79AEDC),
-        CONCISE("text.translate_allinone.chat_input_panel.concise", "-", 0xFF7FC188),
-        RESTORE("text.translate_allinone.chat_input_panel.restore", "R", 0xFFC77A7A);
-
-        private final String key;
-        private final String icon;
-        private final int accentColor;
-
-        PanelAction(String key, String icon, int accentColor) {
-            this.key = key;
-            this.icon = icon;
-            this.accentColor = accentColor;
-        }
-
-        public Text label() {
-            return Text.translatable(this.key);
-        }
-
-        public String icon() {
-            return this.icon;
-        }
-
-        public int accentColor() {
-            return this.accentColor;
-        }
-    }
-
-    @Unique
-    private record PanelRect(int x, int y, int width, int height) {
-        private int right() {
-            return x + width;
-        }
-
-        private int bottom() {
-            return y + height;
-        }
-
-        private boolean contains(double px, double py) {
-            return px >= x && px < right() && py >= y && py < bottom();
-        }
-    }
 }

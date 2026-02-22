@@ -14,13 +14,16 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.ArrayList;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class ItemTemplateCache {
 
@@ -34,9 +37,12 @@ public class ItemTemplateCache {
 
     public record CacheStats(int translated, int total) {}
 
+    public record LookupResult(TranslationStatus status, String translation, String errorMessage) {}
+
     private static final ItemTemplateCache INSTANCE = new ItemTemplateCache();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final String CACHE_FILE_NAME = "item_translate_cache.json";
+    private static final long SAVE_DEBOUNCE_MILLIS = 1500L;
     private final Path cacheFilePath;
     private final Map<String, String> templateCache = new ConcurrentHashMap<>();
     private final Set<String> inProgress = ConcurrentHashMap.newKeySet();
@@ -44,7 +50,14 @@ public class ItemTemplateCache {
     private final LinkedBlockingQueue<List<String>> batchWorkQueue = new LinkedBlockingQueue<>();
     private final Set<String> allQueuedOrInProgressKeys = ConcurrentHashMap.newKeySet();
     private final Map<String, String> errorCache = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService saveExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread thread = new Thread(r, "translate_allinone-item-cache-save");
+        thread.setDaemon(true);
+        return thread;
+    });
     private volatile boolean isDirty = false;
+    private volatile long lastSaveAtMillis = 0;
+    private volatile boolean saveScheduled = false;
 
     private ItemTemplateCache() {
         this.cacheFilePath = FabricLoader.getInstance().getConfigDir()
@@ -100,6 +113,7 @@ public class ItemTemplateCache {
     }
 
     public synchronized void save() {
+        saveScheduled = false;
         if (!isDirty) {
             return;
         }
@@ -119,25 +133,36 @@ public class ItemTemplateCache {
 
                 Translate_AllinOne.LOGGER.info("Successfully saved {} item translation cache entries.", templateCache.size());
                 isDirty = false;
+                lastSaveAtMillis = System.currentTimeMillis();
         } catch (IOException e) {
             Translate_AllinOne.LOGGER.error("Failed to save item translation cache", e);
         }
     }
 
     public String getOrQueue(String originalTemplate) {
-        if (templateCache.containsKey(originalTemplate)) {
-            String translation = templateCache.get(originalTemplate);
-            if (translation != null && !translation.isEmpty()) {
-                return translation;
-            }
+        return lookupOrQueue(originalTemplate).translation();
+    }
+
+    public LookupResult lookupOrQueue(String originalTemplate) {
+        String translation = templateCache.get(originalTemplate);
+        if (translation != null && !translation.isEmpty()) {
+            return new LookupResult(TranslationStatus.TRANSLATED, translation, null);
         }
 
-        // Atomically check and add.
-        // If the key was not already in the set, add it to the pending queue.
+        String errorMessage = errorCache.get(originalTemplate);
+        if (errorMessage != null) {
+            return new LookupResult(TranslationStatus.ERROR, "", errorMessage);
+        }
+
+        if (inProgress.contains(originalTemplate)) {
+            return new LookupResult(TranslationStatus.IN_PROGRESS, "", null);
+        }
+
         if (allQueuedOrInProgressKeys.add(originalTemplate)) {
             pendingQueue.offerLast(originalTemplate);
         }
-        return "";
+
+        return new LookupResult(TranslationStatus.PENDING, "", null);
     }
 
     public TranslationStatus getTemplateStatus(String templateKey) {
@@ -147,7 +172,7 @@ public class ItemTemplateCache {
         if (inProgress.contains(templateKey)) {
             return TranslationStatus.IN_PROGRESS;
         }
-        if (pendingQueue.contains(templateKey)) {
+        if (allQueuedOrInProgressKeys.contains(templateKey)) {
             return TranslationStatus.PENDING;
         }
 
@@ -212,6 +237,14 @@ public class ItemTemplateCache {
         }
     }
 
+    public synchronized void releaseInProgress(Set<String> keys) {
+        if (keys == null || keys.isEmpty()) {
+            return;
+        }
+        inProgress.removeAll(keys);
+        allQueuedOrInProgressKeys.removeAll(keys);
+    }
+
     public synchronized void updateTranslations(Map<String, String> translations) {
         if (translations == null || translations.isEmpty()) {
             return;
@@ -225,8 +258,24 @@ public class ItemTemplateCache {
         
         isDirty = true;
         Translate_AllinOne.LOGGER.info("Updated {} translations in the cache.", translations.size());
-         
-        save();
+
+        scheduleSave();
+    }
+
+    private synchronized void scheduleSave() {
+        long elapsed = System.currentTimeMillis() - lastSaveAtMillis;
+        if (elapsed >= SAVE_DEBOUNCE_MILLIS) {
+            save();
+            return;
+        }
+
+        if (saveScheduled) {
+            return;
+        }
+
+        long delayMillis = Math.max(0, SAVE_DEBOUNCE_MILLIS - elapsed);
+        saveScheduled = true;
+        saveExecutor.schedule(this::save, delayMillis, TimeUnit.MILLISECONDS);
     }
 
     public synchronized void requeueFailed(Set<String> failedKeys, String errorMessage) {

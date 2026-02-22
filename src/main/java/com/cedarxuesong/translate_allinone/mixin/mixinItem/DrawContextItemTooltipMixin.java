@@ -7,7 +7,6 @@ import com.cedarxuesong.translate_allinone.utils.config.pojos.ItemTranslateConfi
 import com.cedarxuesong.translate_allinone.utils.input.KeybindingManager;
 import com.cedarxuesong.translate_allinone.utils.text.StylePreserver;
 import com.cedarxuesong.translate_allinone.utils.text.TemplateProcessor;
-import com.cedarxuesong.translate_allinone.utils.translate.ItemTranslateManager;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.item.ItemStack;
@@ -33,6 +32,9 @@ public abstract class DrawContextItemTooltipMixin {
 
     @Unique
     private static final String MISSING_KEY_HINT = "missing key";
+
+    @Unique
+    private static final String KEY_MISMATCH_HINT = "key mismatch";
 
     @Unique
     private static final String ITEM_STATUS_ANIMATION_KEY = "item-tooltip-status";
@@ -130,12 +132,13 @@ public abstract class DrawContextItemTooltipMixin {
                 String legacyTemplateKey = StylePreserver.toLegacyTemplate(unicodeTemplate, styleResult.styleMap);
 
                 ItemTemplateCache cache = ItemTemplateCache.getInstance();
-                ItemTemplateCache.TranslationStatus status = cache.getTemplateStatus(legacyTemplateKey);
+                ItemTemplateCache.LookupResult lookupResult = cache.lookupOrQueue(legacyTemplateKey);
+                ItemTemplateCache.TranslationStatus status = lookupResult.status();
                 if (status == ItemTemplateCache.TranslationStatus.PENDING || status == ItemTemplateCache.TranslationStatus.IN_PROGRESS) {
                     isCurrentItemStackPending = true;
                 }
 
-                String translatedTemplate = cache.getOrQueue(legacyTemplateKey);
+                String translatedTemplate = lookupResult.translation();
                 Text finalTooltipLine;
                 String reassembledOriginal = TemplateProcessor.reassemble(unicodeTemplate, templateResult.values);
                 Text originalTextObject = StylePreserver.reapplyStyles(reassembledOriginal, styleResult.styleMap);
@@ -144,20 +147,13 @@ public abstract class DrawContextItemTooltipMixin {
                     String reassembledTranslated = TemplateProcessor.reassemble(translatedTemplate, templateResult.values);
                     finalTooltipLine = StylePreserver.fromLegacyText(reassembledTranslated);
                 } else if (status == ItemTemplateCache.TranslationStatus.ERROR) {
-                    String errorMessage = cache.getError(legacyTemplateKey);
+                    String errorMessage = lookupResult.errorMessage();
                     if (translate_allinone$isMissingKeyIssue(errorMessage)) {
                         isCurrentItemStackPending = true;
                         hasMissingKeyIssue = true;
-                        finalTooltipLine = AnimationManager.getAnimatedStyledText(originalTextObject, legacyTemplateKey, true);
+                        finalTooltipLine = originalTextObject;
                     } else {
-                        MutableText errorText = Text.literal("Error: " + errorMessage).formatted(Formatting.RED);
-
-                        ItemTranslateManager.RateLimitStatus rateLimitStatus = ItemTranslateManager.getInstance().getRateLimitStatus();
-                        if (rateLimitStatus.isRateLimited()) {
-                            errorText.append(Text.literal(" (retry in " + rateLimitStatus.estimatedWaitSeconds() + "s)")
-                                    .formatted(Formatting.YELLOW));
-                        }
-                        finalTooltipLine = errorText;
+                        finalTooltipLine = Text.literal("Error: " + errorMessage).formatted(Formatting.RED);
                     }
                 } else {
                     finalTooltipLine = AnimationManager.getAnimatedStyledText(originalTextObject, legacyTemplateKey, false);
@@ -167,13 +163,12 @@ public abstract class DrawContextItemTooltipMixin {
             }
 
             ItemTemplateCache.CacheStats stats = ItemTemplateCache.getInstance().getCacheStats();
-            ItemTranslateManager.RateLimitStatus rateLimitStatus = ItemTranslateManager.getInstance().getRateLimitStatus();
 
             boolean isAnythingPending = stats.total() > stats.translated();
-            boolean shouldShowStatus = isCurrentItemStackPending || hasMissingKeyIssue || (rateLimitStatus.isRateLimited() && isAnythingPending);
+            boolean shouldShowStatus = isCurrentItemStackPending || hasMissingKeyIssue || isAnythingPending;
 
             if (translatableLines > 0 && shouldShowStatus) {
-                mirroredTooltip.add(translate_allinone$createStatusLine(stats, rateLimitStatus, hasMissingKeyIssue));
+                mirroredTooltip.add(translate_allinone$createStatusLine(stats, hasMissingKeyIssue));
             }
 
             return mirroredTooltip;
@@ -191,28 +186,18 @@ public abstract class DrawContextItemTooltipMixin {
     }
 
     @Unique
-    private static Text translate_allinone$createStatusLine(ItemTemplateCache.CacheStats stats, ItemTranslateManager.RateLimitStatus rateLimitStatus) {
-        return translate_allinone$createStatusLine(stats, rateLimitStatus, false);
-    }
-
-    @Unique
     private static Text translate_allinone$createStatusLine(
             ItemTemplateCache.CacheStats stats,
-            ItemTranslateManager.RateLimitStatus rateLimitStatus,
             boolean hasMissingKeyIssue
     ) {
         float percentage = (stats.total() > 0) ? ((float) stats.translated() / stats.total()) * 100 : 100;
         String progressText = String.format(" (%d/%d) - %.0f%%", stats.translated(), stats.total(), percentage);
 
-        MutableText statusText;
-        if (rateLimitStatus.isRateLimited() && rateLimitStatus.estimatedWaitSeconds() > 0) {
-            Text rateLimitMessage = Text.literal("Rate limit reached, waiting " + rateLimitStatus.estimatedWaitSeconds() + "s")
-                    .formatted(Formatting.RED);
-            statusText = AnimationManager.getAnimatedStyledText(rateLimitMessage, ITEM_STATUS_ANIMATION_KEY, true);
-        } else {
-            Text translatingMessage = Text.literal("Translating...").formatted(Formatting.GRAY);
-            statusText = AnimationManager.getAnimatedStyledText(translatingMessage, ITEM_STATUS_ANIMATION_KEY, hasMissingKeyIssue);
-        }
+        Text statusMessage = hasMissingKeyIssue
+                ? Text.literal("Item translation key mismatch, retrying...").formatted(Formatting.RED)
+                : Text.literal("Translating...").formatted(Formatting.GRAY);
+
+        MutableText statusText = AnimationManager.getAnimatedStyledText(statusMessage, ITEM_STATUS_ANIMATION_KEY, hasMissingKeyIssue);
 
         return statusText.append(Text.literal(progressText).formatted(Formatting.YELLOW));
     }
@@ -222,6 +207,7 @@ public abstract class DrawContextItemTooltipMixin {
         if (errorMessage == null || errorMessage.isEmpty()) {
             return false;
         }
-        return errorMessage.toLowerCase(Locale.ROOT).contains(MISSING_KEY_HINT);
+        String lower = errorMessage.toLowerCase(Locale.ROOT);
+        return lower.contains(MISSING_KEY_HINT) || lower.contains(KEY_MISMATCH_HINT);
     }
 }
