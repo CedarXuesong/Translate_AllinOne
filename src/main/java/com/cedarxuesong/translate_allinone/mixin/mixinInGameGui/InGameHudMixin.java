@@ -53,7 +53,7 @@ public class InGameHudMixin {
 
         StylePreserver.ExtractionResult styleResult = StylePreserver.extractAndMark(originalText);
         TemplateProcessor.TemplateExtractionResult templateResult = TemplateProcessor.extract(styleResult.markedText);
-        String unicodeTemplate = templateResult.template;
+        String unicodeTemplate = templateResult.template();
         String legacyTemplateKey = StylePreserver.toLegacyTemplate(unicodeTemplate, styleResult.styleMap);
 
         ScoreboardTextCache cache = ScoreboardTextCache.getInstance();
@@ -62,11 +62,11 @@ public class InGameHudMixin {
         String translatedTemplate = lookupResult.translation();
 
         if (status == ScoreboardTextCache.TranslationStatus.TRANSLATED) {
-            String reassembledTranslated = TemplateProcessor.reassemble(translatedTemplate, templateResult.values);
+            String reassembledTranslated = TemplateProcessor.reassemble(translatedTemplate, templateResult.values());
             return StylePreserver.fromLegacyText(reassembledTranslated);
         }
 
-        String reassembledOriginal = TemplateProcessor.reassemble(unicodeTemplate, templateResult.values);
+        String reassembledOriginal = TemplateProcessor.reassemble(unicodeTemplate, templateResult.values());
         Text originalTextObject = StylePreserver.reapplyStyles(reassembledOriginal, styleResult.styleMap);
 
         if (status == ScoreboardTextCache.TranslationStatus.ERROR) {

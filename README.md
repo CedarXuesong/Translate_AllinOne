@@ -7,7 +7,7 @@
 > - Java: **21+**
 > - This project is actively evolving. Feedback and bug reports are welcome in Issues.
 
-An in-game AI translation mod for Minecraft that supports chat, chat input, item tooltip, and scoreboard translation with multi-provider routing and a fully in-game configuration workflow.
+An in-game AI translation mod for Minecraft that supports chat, chat input, item tooltip, and scoreboard translation with multi-provider routing, an AI chat-input assistant panel, and a fully in-game configuration workflow.
 
 ---
 
@@ -20,7 +20,7 @@ An in-game AI translation mod for Minecraft that supports chat, chat input, item
 | Module | What it does | Highlights |
 | --- | --- | --- |
 | Chat Output | Translates incoming chat lines | Auto mode or manual `[T]` click mode, optional streaming display |
-| Chat Input | Translates your text before send | Hotkey-driven, optional streaming update in input field |
+| Chat Input | Translates your text before send | Hotkey-driven translation plus AI rewrite actions (Translate/Professional/Friendly/Expand/Concise/Restore), optional streaming update |
 | Item Tooltip | Translates item custom name and lore | Template/style-preserving pipeline, async cache queue |
 | Scoreboard Sidebar | Translates prefix/suffix and player name display | Real-time replacement with style-preserving reconstruction |
 
@@ -56,20 +56,27 @@ An in-game AI translation mod for Minecraft that supports chat, chat input, item
 - Item and scoreboard template caches persisted on disk.
 - Retry queue prioritizes requeued failed items (front-of-queue retry).
 - Batch translation with configurable batch size/thread count (item/scoreboard).
-- Rate-limit-aware status feedback.
-- Missing-key retry visualization:
-  - Tooltip/scoreboard animation transitions from gray wave to red alert wave.
+- Session-epoch guard prevents stale async callbacks from writing outdated results after world/session switches.
+- Missing-key and key-mismatch detection triggers prioritized retries with clear in-game fallback/status behavior.
+
+### Command and update helpers
+
+- Startup update check against GitHub releases (latest tag detection).
+- In-game update notice in chat and config modal, with one-click open release page.
+- Client command: `translate_allinone translatechatline <messageId>` for manual chat-line retranslation (used by manual `[T]` workflows).
 
 ### In-game config UI features
 
 - Full ModMenu-based custom config screen.
 - Structured sections with group boxes.
 - Scroll + clipping + scrollbar drag support for long content.
+- Provider/model operations inside game: add/remove providers, test connection, manage route models, set default model, edit custom JSON parameters.
 - Unified action flow:
   - **Done** = save and close
   - **Cancel** = discard unsaved changes
   - **Reset** (red button) = reset to defaults after confirmation
 - Built-in hotkey capture in config UI (no legacy requirement to bind in Minecraft Controls for these module bindings).
+- Config-side update notice modal supports opening the latest release page directly.
 
 ## Requirements
 
@@ -133,7 +140,7 @@ MIT. See [LICENSE](./LICENSE).
 | 模块 | 功能 | 主要特点 |
 | --- | --- | --- |
 | 聊天输出翻译 | 翻译收到的聊天消息 | 支持自动翻译和手动 `[T]` 点击翻译，支持流式显示 |
-| 聊天输入翻译 | 发送前翻译输入框内容 | 通过快捷键触发，可流式回填输入框 |
+| 聊天输入翻译 | 发送前翻译输入框内容 | 快捷键触发翻译 + AI 改写面板（翻译/专业/友好/扩写/简化/还原），可流式回填输入框 |
 | 物品翻译 | 翻译物品名称与 Lore | 模板/样式保留，异步缓存队列 |
 | 计分板翻译 | 翻译侧边栏显示文本 | 前后缀与玩家名按配置实时替换 |
 
@@ -169,19 +176,27 @@ MIT. See [LICENSE](./LICENSE).
 - 物品与计分板采用持久化模板缓存，减少重复请求。
 - 失败重试任务使用更高优先级（进入队列前部）。
 - 物品/计分板支持批处理与并发参数配置。
-- 有限流状态提示与重试反馈。
-- missing key 场景动画：灰白波动逐渐过渡到红色警示波动，恢复后再回到灰白。
+- 会话 Epoch 防护：切换世界/会话后，旧异步回调不会回写过期翻译结果。
+- missing key / key mismatch 会触发优先重试，并提供更明确的游戏内状态回退与反馈。
+
+### 命令与更新提醒
+
+- 启动时自动检查 GitHub 最新版本（tag）。
+- 在聊天栏与配置界面内提供更新提示，并支持一键打开 Release 页面。
+- 提供客户端命令：`translate_allinone translatechatline <messageId>`，用于手动重翻译聊天行（`[T]` 流程会使用该链路）。
 
 ### 配置界面特性
 
 - 基于 ModMenu 的完整自定义配置界面。
 - 分组框布局（Basic / Hotkey / Performance / Route / Providers）。
 - 支持滚动、裁剪、滚动条拖动，长列表/小窗口可正常使用。
+- 可在游戏内完成 provider/model 管理：新增/删除服务商、测试连接、设置路由模型、设为默认模型、自定义参数树编辑。
 - 顶部动作统一：
   - **完成** = 保存并关闭
   - **取消** = 放弃未保存修改
   - **重置**（红色按钮）= 二次确认后恢复默认配置
 - 模块快捷键支持在配置界面内直接捕获与清除。
+- 配置界面的更新提示弹窗支持直接打开最新版本发布页。
 
 ## 运行环境要求
 

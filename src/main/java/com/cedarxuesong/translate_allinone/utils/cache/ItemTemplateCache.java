@@ -3,13 +3,15 @@ package com.cedarxuesong.translate_allinone.utils.cache;
 import com.cedarxuesong.translate_allinone.Translate_AllinOne;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.reflect.TypeToken;
+import com.google.gson.JsonParseException;
+import com.google.gson.Strictness;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
 import net.fabricmc.loader.api.FabricLoader;
 
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.lang.reflect.Type;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -39,9 +41,18 @@ public class ItemTemplateCache {
 
     public record LookupResult(TranslationStatus status, String translation, String errorMessage) {}
 
+    private record LoadedEntries(
+            Map<String, String> entries,
+            int duplicateKeyCount,
+            int skippedValueCount,
+            int replacementCharCount,
+            Charset sourceCharset
+    ) {}
+
     private static final ItemTemplateCache INSTANCE = new ItemTemplateCache();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final String CACHE_FILE_NAME = "item_translate_cache.json";
+    private static final Charset CACHE_CHARSET = StandardCharsets.UTF_8;
     private static final long SAVE_DEBOUNCE_MILLIS = 1500L;
     private final Path cacheFilePath;
     private final Map<String, String> templateCache = new ConcurrentHashMap<>();
@@ -65,21 +76,6 @@ public class ItemTemplateCache {
                 .resolve(CACHE_FILE_NAME);
     }
 
-    public void clearPendingAndInProgress() {
-        if (!pendingQueue.isEmpty()) {
-            pendingQueue.clear();
-        }
-        if (!inProgress.isEmpty()) {
-            inProgress.clear();
-        }
-        allQueuedOrInProgressKeys.clear();
-        batchWorkQueue.clear();
-    }
-
-    public synchronized boolean isPendingQueueEmpty() {
-        return pendingQueue.isEmpty();
-    }
-
     public static ItemTemplateCache getInstance() {
         return INSTANCE;
     }
@@ -90,17 +86,41 @@ public class ItemTemplateCache {
         batchWorkQueue.clear();
         allQueuedOrInProgressKeys.clear();
         errorCache.clear();
+        boolean shouldRewriteCacheFile = false;
 
         if (Files.exists(cacheFilePath)) {
-            try (FileReader reader = new FileReader(cacheFilePath.toFile())) {
-                Type type = new TypeToken<ConcurrentHashMap<String, String>>() {}.getType();
-                Map<String, String> loadedCache = GSON.fromJson(reader, type);
-                if (loadedCache != null) {
-                    templateCache.putAll(loadedCache);
-                    Translate_AllinOne.LOGGER.info(
-                            "Successfully loaded {} item translation cache entries (in-memory total: {}).",
-                            loadedCache.size(),
-                            templateCache.size()
+            try {
+                LoadedEntries loadedEntries = loadEntriesWithBestCharset();
+                Map<String, String> loadedCache = loadedEntries.entries();
+                templateCache.putAll(loadedCache);
+
+                Translate_AllinOne.LOGGER.info(
+                        "Successfully loaded {} item translation cache entries (in-memory total: {}).",
+                        loadedCache.size(),
+                        templateCache.size()
+                );
+
+                if (loadedEntries.duplicateKeyCount() > 0) {
+                    shouldRewriteCacheFile = true;
+                    Translate_AllinOne.LOGGER.warn(
+                            "Detected {} duplicate item cache keys while loading. Last value was kept for each duplicate key.",
+                            loadedEntries.duplicateKeyCount()
+                    );
+                }
+
+                if (loadedEntries.skippedValueCount() > 0) {
+                    shouldRewriteCacheFile = true;
+                    Translate_AllinOne.LOGGER.warn(
+                            "Skipped {} non-primitive item cache values while loading.",
+                            loadedEntries.skippedValueCount()
+                    );
+                }
+
+                if (!CACHE_CHARSET.equals(loadedEntries.sourceCharset())) {
+                    shouldRewriteCacheFile = true;
+                    Translate_AllinOne.LOGGER.warn(
+                            "Loaded item cache using fallback charset {}. It will be rewritten as UTF-8.",
+                            loadedEntries.sourceCharset().displayName()
                     );
                 }
             } catch (IOException | RuntimeException e) {
@@ -109,7 +129,13 @@ public class ItemTemplateCache {
         } else {
             Translate_AllinOne.LOGGER.info("Item translation cache file not found, a new one will be created upon saving.");
         }
-        isDirty = false;
+
+        if (shouldRewriteCacheFile) {
+            isDirty = true;
+            scheduleSave();
+        } else {
+            isDirty = false;
+        }
     }
 
     public synchronized void save() {
@@ -121,7 +147,7 @@ public class ItemTemplateCache {
         try {
             Files.createDirectories(cacheFilePath.getParent());
             Path tempPath = cacheFilePath.resolveSibling(cacheFilePath.getFileName() + ".tmp");
-            try (FileWriter writer = new FileWriter(tempPath.toFile())) {
+            try (var writer = Files.newBufferedWriter(tempPath, CACHE_CHARSET)) {
                 GSON.toJson(templateCache, writer);
             }
 
@@ -139,8 +165,164 @@ public class ItemTemplateCache {
         }
     }
 
-    public String getOrQueue(String originalTemplate) {
-        return lookupOrQueue(originalTemplate).translation();
+    private LoadedEntries loadEntriesWithBestCharset() throws IOException {
+        Charset defaultCharset = Charset.defaultCharset();
+        if (CACHE_CHARSET.equals(defaultCharset)) {
+            return loadEntriesWithCharset(CACHE_CHARSET);
+        }
+
+        LoadedEntries utf8Entries = null;
+        Exception utf8Failure = null;
+        try {
+            utf8Entries = loadEntriesWithCharset(CACHE_CHARSET);
+        } catch (IOException | RuntimeException e) {
+            utf8Failure = e;
+        }
+
+        LoadedEntries defaultCharsetEntries = null;
+        Exception defaultCharsetFailure = null;
+        try {
+            defaultCharsetEntries = loadEntriesWithCharset(defaultCharset);
+        } catch (IOException | RuntimeException e) {
+            defaultCharsetFailure = e;
+        }
+
+        if (utf8Entries != null && defaultCharsetEntries != null) {
+            return chooseBetterEntries(utf8Entries, defaultCharsetEntries);
+        }
+
+        if (utf8Entries != null) {
+            if (defaultCharsetFailure != null) {
+                Translate_AllinOne.LOGGER.warn(
+                        "Failed to load item cache with fallback charset {}. Using UTF-8 result.",
+                        defaultCharset.displayName(),
+                        defaultCharsetFailure
+                );
+            }
+            return utf8Entries;
+        }
+
+        if (defaultCharsetEntries != null) {
+            Translate_AllinOne.LOGGER.warn(
+                    "Failed to load item cache with UTF-8. Falling back to charset {}.",
+                    defaultCharset.displayName(),
+                    utf8Failure
+            );
+            return defaultCharsetEntries;
+        }
+
+        if (utf8Failure instanceof IOException utf8IoException) {
+            if (defaultCharsetFailure != null) {
+                utf8IoException.addSuppressed(defaultCharsetFailure);
+            }
+            throw utf8IoException;
+        }
+
+        RuntimeException combinedException = new RuntimeException(
+                "Failed to load item cache with both UTF-8 and fallback charset.",
+                utf8Failure
+        );
+        if (defaultCharsetFailure != null) {
+            combinedException.addSuppressed(defaultCharsetFailure);
+        }
+        throw combinedException;
+    }
+
+    private LoadedEntries chooseBetterEntries(LoadedEntries utf8Entries, LoadedEntries defaultCharsetEntries) {
+        if (defaultCharsetEntries.replacementCharCount() < utf8Entries.replacementCharCount()) {
+            return defaultCharsetEntries;
+        }
+
+        if (defaultCharsetEntries.replacementCharCount() > utf8Entries.replacementCharCount()) {
+            return utf8Entries;
+        }
+
+        if (defaultCharsetEntries.entries().size() > utf8Entries.entries().size()) {
+            return defaultCharsetEntries;
+        }
+
+        if (defaultCharsetEntries.entries().size() < utf8Entries.entries().size()) {
+            return utf8Entries;
+        }
+
+        if (defaultCharsetEntries.skippedValueCount() < utf8Entries.skippedValueCount()) {
+            return defaultCharsetEntries;
+        }
+
+        if (defaultCharsetEntries.skippedValueCount() > utf8Entries.skippedValueCount()) {
+            return utf8Entries;
+        }
+
+        return utf8Entries;
+    }
+
+    private LoadedEntries loadEntriesWithCharset(Charset charset) throws IOException {
+        Map<String, String> loadedCache = new ConcurrentHashMap<>();
+        int duplicateKeyCount = 0;
+        int skippedValueCount = 0;
+        int replacementCharCount = 0;
+
+        try (JsonReader reader = new JsonReader(Files.newBufferedReader(cacheFilePath, charset))) {
+            reader.setStrictness(Strictness.LENIENT);
+            JsonToken rootToken = reader.peek();
+
+            if (rootToken == JsonToken.NULL) {
+                reader.nextNull();
+                return new LoadedEntries(loadedCache, 0, 0, 0, charset);
+            }
+
+            if (rootToken != JsonToken.BEGIN_OBJECT) {
+                throw new JsonParseException("Item cache root is not a JSON object.");
+            }
+
+            reader.beginObject();
+            while (reader.hasNext()) {
+                String key = reader.nextName();
+                replacementCharCount += countReplacementChars(key);
+
+                JsonToken valueToken = reader.peek();
+                if (valueToken == JsonToken.NULL) {
+                    reader.nextNull();
+                    skippedValueCount++;
+                    continue;
+                }
+
+                if (valueToken == JsonToken.BEGIN_ARRAY || valueToken == JsonToken.BEGIN_OBJECT) {
+                    reader.skipValue();
+                    skippedValueCount++;
+                    continue;
+                }
+
+                String value;
+                if (valueToken == JsonToken.BOOLEAN) {
+                    value = Boolean.toString(reader.nextBoolean());
+                } else {
+                    value = reader.nextString();
+                }
+                replacementCharCount += countReplacementChars(value);
+
+                if (loadedCache.put(key, value) != null) {
+                    duplicateKeyCount++;
+                }
+            }
+            reader.endObject();
+        }
+
+        return new LoadedEntries(loadedCache, duplicateKeyCount, skippedValueCount, replacementCharCount, charset);
+    }
+
+    private int countReplacementChars(String text) {
+        if (text == null || text.isEmpty()) {
+            return 0;
+        }
+
+        int count = 0;
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) == '\uFFFD') {
+                count++;
+            }
+        }
+        return count;
     }
 
     public LookupResult lookupOrQueue(String originalTemplate) {
@@ -165,29 +347,6 @@ public class ItemTemplateCache {
         return new LookupResult(TranslationStatus.PENDING, "", null);
     }
 
-    public TranslationStatus getTemplateStatus(String templateKey) {
-        if (errorCache.containsKey(templateKey)) {
-            return TranslationStatus.ERROR;
-        }
-        if (inProgress.contains(templateKey)) {
-            return TranslationStatus.IN_PROGRESS;
-        }
-        if (allQueuedOrInProgressKeys.contains(templateKey)) {
-            return TranslationStatus.PENDING;
-        }
-
-        if (templateCache.containsKey(templateKey)) {
-            String translation = templateCache.get(templateKey);
-            if (translation != null && !translation.isEmpty()) {
-                return TranslationStatus.TRANSLATED;
-            } else {
-                return TranslationStatus.PENDING;
-            }
-        }
-        
-        return TranslationStatus.NOT_CACHED;
-    }
-
     public synchronized CacheStats getCacheStats() {
         long translatedCount = templateCache.values().stream()
                 .filter(v -> v != null && !v.isEmpty())
@@ -205,10 +364,6 @@ public class ItemTemplateCache {
 
     public Set<String> getErroredKeys() {
         return new java.util.HashSet<>(errorCache.keySet());
-    }
-
-    public String getError(String templateKey) {
-        return errorCache.get(templateKey);
     }
 
     public List<String> drainAllPendingItems() {

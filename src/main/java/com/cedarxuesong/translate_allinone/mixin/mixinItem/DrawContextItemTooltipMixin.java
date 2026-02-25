@@ -128,7 +128,7 @@ public abstract class DrawContextItemTooltipMixin {
 
                 StylePreserver.ExtractionResult styleResult = StylePreserver.extractAndMark(line);
                 TemplateProcessor.TemplateExtractionResult templateResult = TemplateProcessor.extract(styleResult.markedText);
-                String unicodeTemplate = templateResult.template;
+                String unicodeTemplate = templateResult.template();
                 String legacyTemplateKey = StylePreserver.toLegacyTemplate(unicodeTemplate, styleResult.styleMap);
 
                 ItemTemplateCache cache = ItemTemplateCache.getInstance();
@@ -140,11 +140,11 @@ public abstract class DrawContextItemTooltipMixin {
 
                 String translatedTemplate = lookupResult.translation();
                 Text finalTooltipLine;
-                String reassembledOriginal = TemplateProcessor.reassemble(unicodeTemplate, templateResult.values);
+                String reassembledOriginal = TemplateProcessor.reassemble(unicodeTemplate, templateResult.values());
                 Text originalTextObject = StylePreserver.reapplyStyles(reassembledOriginal, styleResult.styleMap);
 
                 if (status == ItemTemplateCache.TranslationStatus.TRANSLATED) {
-                    String reassembledTranslated = TemplateProcessor.reassemble(translatedTemplate, templateResult.values);
+                    String reassembledTranslated = TemplateProcessor.reassemble(translatedTemplate, templateResult.values());
                     finalTooltipLine = StylePreserver.fromLegacyText(reassembledTranslated);
                 } else if (status == ItemTemplateCache.TranslationStatus.ERROR) {
                     String errorMessage = lookupResult.errorMessage();
